@@ -21,6 +21,7 @@ import {
   ArrowUpRightIcon,
   ChevronRightIcon,
   CheckSquareIcon,
+  CloseIcon,
   DocumentIcon,
   ExpandAllIcon,
   FolderPlusIcon,
@@ -404,6 +405,7 @@ export function Sidebar(): JSX.Element {
   const remoteWorkspaceProfiles = useStore((s) => s.remoteWorkspaceProfiles);
   const openVaultPicker = useStore((s) => s.openVaultPicker);
   const openLocalVault = useStore((s) => s.openLocalVault);
+  const closeVault = useStore((s) => s.closeVault);
   const connectRemoteWorkspace = useStore((s) => s.connectRemoteWorkspace);
   const connectRemoteWorkspaceProfile = useStore(
     (s) => s.connectRemoteWorkspaceProfile,
@@ -433,6 +435,7 @@ export function Sidebar(): JSX.Element {
     window.zen.getAppInfo().runtime === "desktop" &&
     window.zen.getCapabilities().supportsRemoteWorkspace;
   const canSwitchVaults = canSwitchLocalVaults || canUseRemoteWorkspaces;
+  const canCloseCurrentVault = canSwitchLocalVaults && workspaceMode !== "remote" && !!vault;
   const absolutePathLabel =
     workspaceMode === "remote" ? "Copy Server Path" : "Copy Absolute Path";
   const canManageAssetFiles =
@@ -2050,6 +2053,15 @@ export function Sidebar(): JSX.Element {
     }
 
     items.push({ kind: "separator" });
+    if (canCloseCurrentVault) {
+      items.push({
+        label: "Close Current Vault",
+        icon: <CloseIcon className="h-4 w-4" />,
+        onSelect: async () => {
+          await closeVault();
+        },
+      });
+    }
     if (canSwitchLocalVaults) {
       items.push({
         label: "Add Local Vault…",
@@ -2081,8 +2093,10 @@ export function Sidebar(): JSX.Element {
 
     return items;
   }, [
+    canCloseCurrentVault,
     canSwitchLocalVaults,
     canUseRemoteWorkspaces,
+    closeVault,
     connectRemoteWorkspace,
     connectRemoteWorkspaceProfile,
     openLocalVault,

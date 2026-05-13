@@ -1657,6 +1657,7 @@ interface Store {
   init: () => Promise<void>
   openVaultPicker: () => Promise<void>
   openLocalVault: (root: string) => Promise<void>
+  closeVault: () => Promise<void>
   connectRemoteWorkspace: () => Promise<void>
   connectRemoteWorkspaceProfile: (id: string) => Promise<void>
   changeRemoteWorkspaceVaultPath: () => Promise<void>
@@ -4741,6 +4742,99 @@ export const useStore = create<Store>((set, get) => {
       await restoreWorkspaceForVault(vault)
     } catch (err) {
       console.error('openLocalVault failed', err)
+      window.alert(err instanceof Error ? err.message : String(err))
+    }
+  },
+
+  closeVault: async () => {
+    const closingVault = get().vault
+    if (!closingVault || get().workspaceMode === 'remote') return
+    try {
+      await get().flushDirtyNotes()
+      set({ workspaceSetupError: null })
+      const fallbackLocalVault =
+        get().localVaults.find((entry) => entry.root !== closingVault.root) ?? null
+      const nextVault = await window.zen.closeVault()
+      const refreshedLocalVaults = await get().refreshLocalVaults()
+      const remoteWorkspaceInfo = await get().refreshWorkspaceContext()
+      const fallbackAfterClose =
+        fallbackLocalVault ??
+        refreshedLocalVaults.find((entry) => entry.root !== closingVault.root) ??
+        null
+      const vaultToOpen =
+        nextVault ??
+        (fallbackAfterClose ? await window.zen.openLocalVault(fallbackAfterClose.root) : null)
+      if (vaultToOpen && !nextVault) await get().refreshLocalVaults()
+
+      if (vaultToOpen) {
+        const vaultSettings = normalizeVaultSettings(await window.zen.getVaultSettings())
+        const fresh = makeLeaf()
+        set({
+          vault: vaultToOpen,
+          workspaceMode: workspaceModeFrom(remoteWorkspaceInfo),
+          remoteWorkspaceInfo,
+          workspaceSetupError: null,
+          vaultSettings,
+          notes: [],
+          folders: [],
+          hasAssetsDir: false,
+          assetFiles: [],
+          assetUndoStack: [],
+          vaultTasks: [],
+          selectedTags: [],
+          view: { kind: 'folder', folder: 'inbox', subpath: '' },
+          selectedPath: null,
+          activeNote: null,
+          activeDirty: false,
+          paneLayout: fresh,
+          activePaneId: fresh.id,
+          noteContents: {},
+          noteDirty: {},
+          loadingNote: false,
+          noteBackstack: [],
+          noteForwardstack: [],
+          pendingJumpLocation: null,
+          pinnedRefPath: null,
+          workspaceRestored: false
+        })
+        savePrefs(collectPrefs(get()))
+        await refreshVaultIndexes()
+        await restoreWorkspaceForVault(vaultToOpen)
+        return
+      }
+
+      const fresh = makeLeaf()
+      set({
+        vault: null,
+        workspaceMode: workspaceModeFrom(remoteWorkspaceInfo),
+        remoteWorkspaceInfo,
+        workspaceSetupError: null,
+        vaultSettings: DEFAULT_VAULT_SETTINGS,
+        notes: [],
+        folders: [],
+        hasAssetsDir: false,
+        assetFiles: [],
+        assetUndoStack: [],
+        vaultTasks: [],
+        selectedTags: [],
+        view: { kind: 'folder', folder: 'inbox', subpath: '' },
+        selectedPath: null,
+        activeNote: null,
+        activeDirty: false,
+        paneLayout: fresh,
+        activePaneId: fresh.id,
+        noteContents: {},
+        noteDirty: {},
+        loadingNote: false,
+        noteBackstack: [],
+        noteForwardstack: [],
+        pendingJumpLocation: null,
+        pinnedRefPath: null,
+        workspaceRestored: true
+      })
+      savePrefs(collectPrefs(get()))
+    } catch (err) {
+      console.error('closeVault failed', err)
       window.alert(err instanceof Error ? err.message : String(err))
     }
   },

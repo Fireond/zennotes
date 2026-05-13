@@ -93,6 +93,7 @@ export interface ZenBridge {
   getCurrentVault(): Promise<VaultInfo | null>
   listLocalVaults(): Promise<LocalVaultEntry[]>
   openLocalVault(root: string): Promise<VaultInfo | null>
+  closeVault(): Promise<VaultInfo | null>
   pickVault(): Promise<VaultInfo | null>
   selectVaultPath(path: string): Promise<VaultInfo>
   browseServerDirectories(path?: string): Promise<DirectoryBrowseResult>

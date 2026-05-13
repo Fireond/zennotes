@@ -1208,6 +1208,17 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       }
     },
     {
+      id: 'app.vault.close',
+      title: 'Close Current Vault',
+      category: 'Vault',
+      keywords: 'vault local close remove forget workspace',
+      when: () =>
+        window.zen.getAppInfo().runtime === 'desktop' &&
+        getState().workspaceMode !== 'remote' &&
+        !!getState().vault,
+      run: () => getState().closeVault()
+    },
+    {
       id: 'app.vault.switch',
       title: 'Switch Vault…',
       category: 'Vault',

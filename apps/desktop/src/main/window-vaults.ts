@@ -84,6 +84,18 @@ export class WindowVaultRegistry {
     return this.sessions.get(windowId)?.vault ?? null
   }
 
+  localVaultsExcept(root: string): VaultInfo[] {
+    const excluded = normalizeRoot(root)
+    const out = new Map<string, VaultInfo>()
+    for (const session of this.sessions.values()) {
+      if (session.mode !== 'local' || !session.vault) continue
+      const candidateRoot = normalizeRoot(session.vault.root)
+      if (candidateRoot === excluded) continue
+      out.set(candidateRoot, { ...session.vault, root: candidateRoot })
+    }
+    return [...out.values()]
+  }
+
   modeForWindow(windowId: number): WindowWorkspaceMode | null {
     return this.sessions.get(windowId)?.mode ?? null
   }

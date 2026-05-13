@@ -15,6 +15,7 @@ function installZen(): void {
         supportsRemoteWorkspace: false,
         supportsCliInstall: false
       }),
+      closeVault: vi.fn(),
       openVaultWindow: vi.fn()
     }
   })
@@ -48,8 +49,10 @@ describe('vault commands', () => {
 
     const commands = buildCommands()
     const switchCommand = commands.find((cmd) => cmd.id === 'app.vault.switch')
+    const closeCommand = commands.find((cmd) => cmd.id === 'app.vault.close')
 
     expect(switchCommand?.title).toBe('Switch Vault…')
+    expect(closeCommand?.title).toBe('Close Current Vault')
     expect(commands.some((cmd) => cmd.id.startsWith('app.vault.local.'))).toBe(false)
   })
 

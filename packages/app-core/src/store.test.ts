@@ -52,8 +52,12 @@ function installZen(overrides: Record<string, unknown> = {}): void {
       }),
       listNotes: vi.fn().mockResolvedValue([makeNote('- [ ] old task')]),
       listFolders: vi.fn().mockResolvedValue([]),
+      listLocalVaults: vi.fn().mockResolvedValue([]),
       listAssets: vi.fn().mockResolvedValue([]),
       hasAssetsDir: vi.fn().mockResolvedValue(false),
+      getRemoteWorkspaceInfo: vi.fn().mockResolvedValue(null),
+      getVaultSettings: vi.fn().mockResolvedValue({}),
+      closeVault: vi.fn().mockResolvedValue(null),
       readNote: vi.fn().mockResolvedValue(makeNote('- [ ] old task')),
       ...overrides
     }
@@ -175,6 +179,112 @@ describe('local vault shortcuts', () => {
     expect(listAssets).toHaveBeenCalledTimes(1)
     expect(useStore.getState().assetFiles).toEqual(assetFiles)
     expect(useStore.getState().hasAssetsDir).toBe(true)
+  })
+
+  it('closes the current local vault and clears workspace state', async () => {
+    const closeVault = vi.fn().mockResolvedValue(null)
+    const listLocalVaults = vi.fn().mockResolvedValue([])
+    installZen({ closeVault, listLocalVaults })
+
+    const { useStore } = await loadStore()
+    useStore.setState({
+      vault: { root: '/Users/test/Notes', name: 'Notes' },
+      workspaceMode: 'local',
+      notes: [makeNote('- [ ] stale task')],
+      folders: [{ folder: 'inbox', subpath: 'Projects', siblingOrder: 0 }],
+      assetFiles: [
+        {
+          path: 'assets/photo.png',
+          name: 'photo.png',
+          kind: 'image' as const,
+          siblingOrder: 0,
+          size: 42,
+          updatedAt: 1
+        }
+      ],
+      selectedPath: 'inbox/Note.md',
+      activeNote: makeNote('Body')
+    })
+
+    await useStore.getState().closeVault()
+
+    expect(closeVault).toHaveBeenCalledTimes(1)
+    expect(listLocalVaults).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().vault).toBeNull()
+    expect(useStore.getState().notes).toEqual([])
+    expect(useStore.getState().folders).toEqual([])
+    expect(useStore.getState().assetFiles).toEqual([])
+    expect(useStore.getState().selectedPath).toBeNull()
+    expect(useStore.getState().activeNote).toBeNull()
+    expect(useStore.getState().workspaceRestored).toBe(true)
+    expect(useStore.getState().localVaults).toEqual([])
+  })
+
+  it('switches to the next remembered local vault when closing the current one', async () => {
+    const nextVault = { root: '/Users/test/Work', name: 'Work' }
+    const closeVault = vi.fn().mockResolvedValue(nextVault)
+    const listLocalVaults = vi.fn().mockResolvedValue([
+      { root: nextVault.root, name: nextVault.name, lastOpenedAt: 1 }
+    ])
+    const listAssets = vi.fn().mockResolvedValue([])
+    installZen({
+      closeVault,
+      listLocalVaults,
+      listAssets,
+      getVaultSettings: vi.fn().mockResolvedValue({})
+    })
+
+    const { useStore } = await loadStore()
+    useStore.setState({
+      vault: { root: '/Users/test/Notes', name: 'Notes' },
+      workspaceMode: 'local',
+      notes: [makeNote('- [ ] stale task')],
+      selectedPath: 'inbox/Note.md',
+      activeNote: makeNote('Body')
+    })
+
+    await useStore.getState().closeVault()
+
+    expect(closeVault).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().vault).toEqual(nextVault)
+    expect(useStore.getState().workspaceRestored).toBe(true)
+    expect(useStore.getState().notes).toHaveLength(1)
+    expect(listAssets).toHaveBeenCalledTimes(1)
+    expect(useStore.getState().localVaults).toEqual([
+      { root: nextVault.root, name: nextVault.name, lastOpenedAt: 1 }
+    ])
+  })
+
+  it('falls back to a remembered local vault when desktop close returns none', async () => {
+    const nextVault = { root: '/Users/test/Work', name: 'Work' }
+    const closeVault = vi.fn().mockResolvedValue(null)
+    const openLocalVault = vi.fn().mockResolvedValue(nextVault)
+    const listLocalVaults = vi
+      .fn()
+      .mockResolvedValueOnce([{ root: nextVault.root, name: nextVault.name, lastOpenedAt: 1 }])
+      .mockResolvedValueOnce([{ root: nextVault.root, name: nextVault.name, lastOpenedAt: 2 }])
+    installZen({
+      closeVault,
+      openLocalVault,
+      listLocalVaults,
+      getVaultSettings: vi.fn().mockResolvedValue({})
+    })
+
+    const { useStore } = await loadStore()
+    useStore.setState({
+      vault: { root: '/Users/test/Notes', name: 'Notes' },
+      workspaceMode: 'local',
+      localVaults: [{ root: nextVault.root, name: nextVault.name, lastOpenedAt: 1 }]
+    })
+
+    await useStore.getState().closeVault()
+
+    expect(closeVault).toHaveBeenCalledTimes(1)
+    expect(openLocalVault).toHaveBeenCalledWith(nextVault.root)
+    expect(useStore.getState().vault).toEqual(nextVault)
+    expect(useStore.getState().localVaults).toEqual([
+      { root: nextVault.root, name: nextVault.name, lastOpenedAt: 2 }
+    ])
   })
 })
 

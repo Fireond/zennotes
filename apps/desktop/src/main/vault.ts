@@ -373,6 +373,14 @@ export function rememberLocalVault(
   ].slice(0, 20)
 }
 
+export function forgetLocalVault(
+  entries: PersistedLocalVault[],
+  root: string
+): PersistedLocalVault[] {
+  const target = path.resolve(root)
+  return entries.filter((entry) => path.resolve(entry.root) !== target)
+}
+
 export async function loadConfig(): Promise<PersistedConfig> {
   try {
     const raw = await fs.readFile(configPath(), 'utf8')

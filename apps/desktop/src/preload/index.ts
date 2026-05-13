@@ -233,6 +233,11 @@ const api: ZenBridge = {
     await refreshRemoteWorkspaceInfo()
     return vault
   },
+  closeVault: async (): Promise<VaultInfo | null> => {
+    const vault = await ipcRenderer.invoke(IPC.VAULT_CLOSE)
+    await refreshRemoteWorkspaceInfo()
+    return vault
+  },
   pickVault: async (): Promise<VaultInfo | null> => {
     const vault = await ipcRenderer.invoke(IPC.VAULT_PICK)
     await refreshRemoteWorkspaceInfo()

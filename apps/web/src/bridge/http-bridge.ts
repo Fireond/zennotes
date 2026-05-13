@@ -261,6 +261,10 @@ function openLocalVault(_root: string): Promise<VaultInfo | null> {
   return Promise.resolve(null)
 }
 
+function closeVault(): Promise<VaultInfo | null> {
+  return Promise.resolve(null)
+}
+
 async function pickVault(): Promise<VaultInfo | null> {
   const current = await getCurrentVault()
   const suggested = current?.root ?? ''
@@ -1001,6 +1005,7 @@ export const httpBridge: ZenBridge = {
   getCurrentVault,
   listLocalVaults,
   openLocalVault,
+  closeVault,
   pickVault,
   selectVaultPath,
   browseServerDirectories,

@@ -52,6 +52,7 @@ import {
   duplicateNote,
   emptyTrash,
   ensureVaultLayout,
+  forgetLocalVault,
   folderAbsolutePath,
   generateDemoTour,
   getVaultSettings,
@@ -975,6 +976,52 @@ async function setVault(root: string): Promise<VaultInfo> {
   return vault
 }
 
+async function closeLocalVaultForWindow(): Promise<VaultInfo | null> {
+  const win = currentIpcWindow() ?? mainWindow
+  if (win && !win.isDestroyed() && windowVaults.isRemoteWindow(win.id)) return null
+  if ((!win || win.isDestroyed()) && currentWorkspaceMode === 'remote') return null
+  const vault = win && !win.isDestroyed() ? windowVaults.vaultForWindow(win.id) : currentVault
+  if (!vault) return null
+
+  const cfg = await loadConfig()
+  const candidates = new Map<string, { root: string; name: string }>()
+  const remainingLocalVaults = forgetLocalVault(cfg.localVaults, vault.root)
+  for (const entry of remainingLocalVaults) {
+    candidates.set(path.resolve(entry.root), entry)
+  }
+  for (const entry of windowVaults.localVaultsExcept(vault.root)) {
+    const root = path.resolve(entry.root)
+    if (!candidates.has(root)) candidates.set(root, entry)
+  }
+  const nextLocalVault = candidates.values().next().value ?? null
+  const nextVault =
+    nextLocalVault && win && !win.isDestroyed()
+      ? await setVaultForWindow(win, nextLocalVault.root, { persist: false })
+      : nextLocalVault
+        ? await setVault(nextLocalVault.root)
+        : null
+
+  if (!nextVault) {
+    if (win && !win.isDestroyed()) {
+      windowVaults.clearWindow(win.id)
+    }
+    if (currentVault && path.resolve(currentVault.root) === path.resolve(vault.root)) {
+      currentVault = null
+    }
+    currentWorkspaceMode = 'local'
+  }
+
+  await updateConfig((cfg) => ({
+    ...cfg,
+    workspaceMode: 'local',
+    vaultRoot: nextVault ? nextVault.root : null,
+    localVaults: forgetLocalVault(cfg.localVaults, vault.root),
+    remoteWorkspaceProfileId: null
+  }))
+
+  return nextVault
+}
+
 async function listLocalVaults(): Promise<LocalVaultEntry[]> {
   const cfg = await loadConfig()
   let entries = cfg.localVaults
@@ -1651,6 +1698,10 @@ function registerIpc(): void {
     const trimmed = typeof root === 'string' ? root.trim() : ''
     if (!trimmed) return null
     return await setVault(trimmed)
+  })
+
+  handle(IPC.VAULT_CLOSE, async () => {
+    return await closeLocalVaultForWindow()
   })
 
   handle(IPC.VAULT_PICK, async (event) => {

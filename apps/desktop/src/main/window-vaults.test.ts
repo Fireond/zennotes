@@ -120,4 +120,19 @@ describe('WindowVaultRegistry', () => {
     )
     expect(registry.isPathInsideOpenLocalVault(`${rootA}-evil/secret.png`)).toBe(false)
   })
+
+  it('lists other open local vaults when closing one window vault', () => {
+    const registry = new WindowVaultRegistry({
+      makeWatcher: () => new TestWatcher(),
+      invalidateVault: () => {},
+      sendVaultChange: () => {}
+    })
+
+    const rootA = path.resolve('/tmp/zennotes-close-a')
+    const rootB = path.resolve('/tmp/zennotes-close-b')
+    registry.setLocalVault(1, { root: rootA, name: 'A' })
+    registry.setLocalVault(2, { root: rootB, name: 'B' })
+
+    expect(registry.localVaultsExcept(rootA)).toEqual([{ root: rootB, name: 'B' }])
+  })
 })

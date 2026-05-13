@@ -8,6 +8,7 @@ import {
   deleteAsset,
   duplicateAsset,
   ensureVaultLayout,
+  forgetLocalVault,
   getVaultSettings,
   importPastedImage,
   invalidateNoteMetaCache,
@@ -74,6 +75,21 @@ describe('rememberLocalVault', () => {
       { root: firstRoot, name: 'First renamed', lastOpenedAt: 30 },
       { root: secondRoot, name: 'Second', lastOpenedAt: 20 }
     ])
+  })
+
+  it('forgets a closed vault by normalized root', () => {
+    const firstRoot = path.resolve('/tmp/zennotes-first')
+    const secondRoot = path.resolve('/tmp/zennotes-second')
+
+    expect(
+      forgetLocalVault(
+        [
+          { root: firstRoot, name: 'First', lastOpenedAt: 10 },
+          { root: secondRoot, name: 'Second', lastOpenedAt: 20 }
+        ],
+        path.join(firstRoot, '.')
+      )
+    ).toEqual([{ root: secondRoot, name: 'Second', lastOpenedAt: 20 }])
   })
 })
 
