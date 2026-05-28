@@ -148,7 +148,13 @@ import {
   pastedImageFilesFromClipboard,
   pastedImageInputFromFile
 } from '../lib/editor-paste-images'
-import { ZEN_SET_PANE_MODE_EVENT, type PaneMode } from '../lib/pane-mode'
+import {
+  paneModeForPath,
+  paneModesWithPathMode,
+  ZEN_SET_PANE_MODE_EVENT,
+  type PaneMode,
+  type PaneModesByPath
+} from '../lib/pane-mode'
 import { resolveCommentAnchor, selectionToCommentAnchor } from '../lib/comments'
 import { ZEN_OPEN_EDITOR_CONTEXT_MENU_EVENT } from '../lib/keyboard-context-menu'
 import {
@@ -575,7 +581,8 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const systemFolderLabels = useStore((s) => s.systemFolderLabels)
   const folderLabels = resolveSystemFolderLabels(systemFolderLabels)
 
-  const [mode, setMode] = useState<PaneMode>('edit')
+  const [modesByPath, setModesByPath] = useState<PaneModesByPath>({})
+  const mode = paneModeForPath(modesByPath, activeTab)
   const [connectionsOpen, setConnectionsOpen] = useState(false)
   const [outlineOpen, setOutlineOpen] = useState(false)
   const [activeOutlineLine, setActiveOutlineLine] = useState<number | null>(null)
@@ -715,7 +722,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   }, [focusedPanel, setActiveCommentId, setConnectionPreview, setFocusedPanel])
 
   const applyPaneMode = useCallback((nextMode: PaneMode) => {
-    setMode(nextMode)
+    setModesByPath((current) => paneModesWithPathMode(current, activeTab, nextMode))
     setActivePane(paneId)
     setFocusedPanel('editor')
     requestAnimationFrame(() => {
@@ -725,7 +732,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       }
       focusEditorNormalMode()
     })
-  }, [paneId, setActivePane, setFocusedPanel])
+  }, [activeTab, paneId, setActivePane, setFocusedPanel])
 
   // `zen:toggle-outline` — routed only to the active pane, same pattern
   // as the connections toggle.
@@ -2476,6 +2483,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   }, [
     content,
     mode,
+    applyPaneMode,
     connectionsOpen,
     toggleConnectionsPanel,
     commentsOpen,
