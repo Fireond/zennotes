@@ -104,6 +104,7 @@
     "executableName": "ZenNotes",
     "productName": "ZenNotes",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "afterPack": "build/after-pack.js",
     "asar": true,
     "compression": "maximum",
     "npmRebuild": false,
