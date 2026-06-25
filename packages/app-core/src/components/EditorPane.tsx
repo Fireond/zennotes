@@ -103,6 +103,7 @@ import { TasksView } from './TasksView'
 import { DatabaseView } from './DatabaseView'
 import { LazyExcalidrawView } from './LazyExcalidrawView'
 import { ObsidianExcalidrawPrompt } from './ObsidianExcalidrawPrompt'
+import { HomeView } from './HomeView'
 import {
   isExcalidrawPath,
   isObsidianExcalidrawMarkdown,
@@ -3394,10 +3395,18 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
             <div className="flex min-h-0 flex-1 items-center justify-center text-sm text-ink-400">
               Loading…
             </div>
-          ) : (
+          ) : zenMode ? (
             <EmptyPaneState
               sidebarOpen={sidebarOpen}
               zenMode={zenMode}
+              onShowSidebar={() => {
+                toggleSidebar()
+                setFocusedPanel('sidebar')
+              }}
+            />
+          ) : (
+            <HomeView
+              sidebarOpen={sidebarOpen}
               onShowSidebar={() => {
                 toggleSidebar()
                 setFocusedPanel('sidebar')

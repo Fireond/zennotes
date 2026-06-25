@@ -319,6 +319,8 @@ export function VimNav(): JSX.Element | null {
       // The selection format toolbar handles its own keyboard navigation
       // (arrows / Enter / Esc) once focused — yield to it entirely.
       if (target?.closest('[data-selection-toolbar]')) return
+      // The home view owns its own roving-focus navigation (↑/↓/j/k/Enter).
+      if (target?.closest('[data-home-nav]')) return
       // The database/table view runs its own vim-style motion grid; yield to it
       // so sidebar/note-list navigation doesn't steal j/k/h/l etc. — EXCEPT the
       // pane prefix (Ctrl+W) and its pending direction key, so the grid can hand
