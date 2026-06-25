@@ -11,5 +11,8 @@
     "build": "tsc --noEmit -p tsconfig.json",
     "test": "vitest",
     "test:run": "vitest run"
+  },
+  "dependencies": {
+    "lz-string": "^1.5.0"
   }
 }
