@@ -655,7 +655,8 @@ export function SettingsModal(): JSX.Element {
       { id: 'nord', label: 'Nord' },
       { id: 'tokyo-night', label: 'Tokyo Night' },
       { id: 'kanagawa', label: 'Kanagawa' },
-      { id: 'black-metal', label: 'Black Metal' }
+      { id: 'black-metal', label: 'Black Metal' },
+      { id: 'rose-pine', label: 'Rosé Pine' }
     ],
     []
   )
