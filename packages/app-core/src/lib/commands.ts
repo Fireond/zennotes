@@ -1042,7 +1042,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       })(),
       category: 'View',
       shortcut: shortcut('global.toggleZenMode'),
-      keywords: 'zen distraction-free focus',
+      keywords: 'zn distraction-free focus',
       run: () => {
         const st = getState()
         st.setFocusMode(!st.zenMode)
@@ -1434,9 +1434,9 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
     },
     {
       id: 'cli.install',
-      title: 'Install Command-Line Tool (zen)',
+      title: 'Install Command-Line Tool (zn)',
       category: 'CLI',
-      keywords: 'cli zen terminal shell command line install symlink path bin',
+      keywords: 'cli zn terminal shell command line install symlink path bin',
       when: () =>
         window.zen.getAppInfo().runtime === 'desktop' &&
         window.zen.getCapabilities().supportsCliInstall,
@@ -1463,8 +1463,8 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
         }
         if (status.installedAt && status.installedByThisApp) {
           await confirmApp({
-            title: 'zen is already installed',
-            description: `Installed at ${status.installedAt}. Run \`zen --help\` from any terminal.`,
+            title: 'zn is already installed',
+            description: `Installed at ${status.installedAt}. Run \`zn --help\` from any terminal.`,
             confirmLabel: 'OK',
             cancelLabel: 'Close'
           })
@@ -1472,7 +1472,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
         }
         if (status.installedAt && !status.installedByThisApp) {
           await confirmApp({
-            title: 'A different `zen` already exists',
+            title: 'A different `zn` already exists',
             description: `${status.installedAt} is not managed by ZenNotes. Remove it manually if you want ZenNotes to take over.`,
             confirmLabel: 'OK',
             cancelLabel: 'Close'
@@ -1491,7 +1491,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
           )
         }
         const ok = await confirmApp({
-          title: `Install zen to ${status.defaultTarget}?`,
+          title: `Install zn to ${status.defaultTarget}?`,
           description: lines.join('\n\n') || undefined,
           confirmLabel: 'Install'
         })
@@ -1502,8 +1502,8 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
             ? `\n\nAdd ${next.defaultTarget.replace(/\/[^/]+$/, '')} to your PATH so the shell can find it:\n${next.pathHint}`
             : ''
           await confirmApp({
-            title: 'zen installed',
-            description: `Symlink created at ${next.installedAt ?? next.defaultTarget}. Open a fresh terminal and run \`zen --help\` to start.${followUp}`,
+            title: 'zn installed',
+            description: `Symlink created at ${next.installedAt ?? next.defaultTarget}. Open a fresh terminal and run \`zn --help\` to start.${followUp}`,
             confirmLabel: 'OK',
             cancelLabel: 'Close'
           })
@@ -1522,9 +1522,9 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
     },
     {
       id: 'cli.uninstall',
-      title: 'Uninstall Command-Line Tool (zen)',
+      title: 'Uninstall Command-Line Tool (zn)',
       category: 'CLI',
-      keywords: 'cli zen terminal shell command line uninstall remove symlink',
+      keywords: 'cli zn terminal shell command line uninstall remove symlink',
       when: () =>
         window.zen.getAppInfo().runtime === 'desktop' &&
         window.zen.getCapabilities().supportsCliInstall,
@@ -1532,7 +1532,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
         const status = await window.zen.cliGetStatus()
         if (!status.installedAt) {
           await confirmApp({
-            title: 'zen is not installed',
+            title: 'zn is not installed',
             description: 'There is nothing to uninstall.',
             confirmLabel: 'OK',
             cancelLabel: 'Close'
@@ -1549,7 +1549,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
           return
         }
         const ok = await confirmApp({
-          title: `Remove zen from ${status.installedAt}?`,
+          title: `Remove zn from ${status.installedAt}?`,
           description:
             'macOS may prompt for an admin password to remove the symlink. The CLI binary inside the app stays bundled — you can reinstall any time.',
           confirmLabel: 'Uninstall',
@@ -1575,7 +1575,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       id: 'cli.openSettings',
       title: 'Open CLI Settings',
       category: 'CLI',
-      keywords: 'cli zen terminal settings command line preferences',
+      keywords: 'cli zn terminal settings command line preferences',
       when: () =>
         window.zen.getAppInfo().runtime === 'desktop' &&
         window.zen.getCapabilities().supportsCliInstall,
