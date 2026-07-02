@@ -2075,6 +2075,10 @@ interface Store {
   /** Vim navigation: which panel is keyboard-focused. */
   focusedPanel: Panel | null
   sidebarCursorIndex: number
+  /** Expanded group keys in the Daily/Weekly date-nav tree (ephemeral UI, not
+   *  persisted). Kept in the store — not Sidebar-local — so the keyboard nav in
+   *  VimNav can expand/collapse date groups like real folders. (#301) */
+  dateNavExpanded: string[]
   noteListCursorIndex: number
   connectionsCursorIndex: number
   connectionPreview: ConnectionPreviewState | null
@@ -2312,6 +2316,10 @@ interface Store {
   setShowSidebarChevrons: (on: boolean) => void
   toggleCollapseFolder: (key: string) => void
   setCollapsedFolders: (keys: string[]) => void
+  /* Daily/Weekly date-nav tree expand state — reachable from VimNav (#301) */
+  expandDateNav: (key: string) => void
+  collapseDateNav: (key: string) => void
+  toggleDateNav: (key: string) => void
 
   /* Pinned reference pane */
   pinReference: (path: string) => Promise<void>
@@ -3436,6 +3444,7 @@ export const useStore = create<Store>((set, get) => {
   tagMatchMode: 'all',
   focusedPanel: null,
   sidebarCursorIndex: 0,
+  dateNavExpanded: [],
   noteListCursorIndex: 0,
   connectionsCursorIndex: 0,
   connectionPreview: null,
@@ -5866,6 +5875,21 @@ export const useStore = create<Store>((set, get) => {
   },
   setFocusedPanel: (panel) => set({ focusedPanel: panel }),
   setSidebarCursorIndex: (idx) => set({ sidebarCursorIndex: idx }),
+  // #301: date-nav tree expand/collapse. Ephemeral (no savePrefs) — mirrors
+  // toggleCollapseFolder but for the Daily/Weekly date groups so VimNav's
+  // keyboard nav can drive them like real folders.
+  expandDateNav: (key) =>
+    set((s) =>
+      s.dateNavExpanded.includes(key) ? {} : { dateNavExpanded: [...s.dateNavExpanded, key] }
+    ),
+  collapseDateNav: (key) =>
+    set((s) => ({ dateNavExpanded: s.dateNavExpanded.filter((k) => k !== key) })),
+  toggleDateNav: (key) =>
+    set((s) =>
+      s.dateNavExpanded.includes(key)
+        ? { dateNavExpanded: s.dateNavExpanded.filter((k) => k !== key) }
+        : { dateNavExpanded: [...s.dateNavExpanded, key] }
+    ),
   setNoteListCursorIndex: (idx) => set({ noteListCursorIndex: idx }),
   setConnectionsCursorIndex: (idx) => set({ connectionsCursorIndex: idx }),
   setConnectionPreview: (preview) => set({ connectionPreview: preview }),

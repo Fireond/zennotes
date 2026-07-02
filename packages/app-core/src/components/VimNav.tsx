@@ -1864,6 +1864,14 @@ export function VimNav(): JSX.Element | null {
 
   function activateSidebarItem(el: HTMLElement | undefined, state: ReturnType<typeof useStore.getState>): void {
     if (!el) return
+    // #301: Daily/Weekly date groups aren't real folders — `l`/Enter/Right
+    // expands them via the store's date-nav state instead of navigating (which
+    // snapped the cursor to the parent) with a no-op collapse toggle.
+    const dateNavKey = el.dataset.sidebarDatenavKey
+    if (dateNavKey) {
+      state.expandDateNav(dateNavKey)
+      return
+    }
     const itemType = el.dataset.sidebarType
     if (itemType === 'folder') {
       const folder = el.dataset.sidebarFolder as 'inbox' | 'quick' | 'archive' | 'trash'
@@ -1960,6 +1968,12 @@ export function VimNav(): JSX.Element | null {
 
   function collapseSidebarItem(el: HTMLElement | undefined, state: ReturnType<typeof useStore.getState>): void {
     if (!el) return
+    // #301: collapse a Daily/Weekly date group via the store's date-nav state.
+    const dateNavKey = el.dataset.sidebarDatenavKey
+    if (dateNavKey) {
+      state.collapseDateNav(dateNavKey)
+      return
+    }
 
     const collapseFolder = (folderEl: HTMLElement | null): void => {
       if (!folderEl) return
@@ -2004,7 +2018,14 @@ export function VimNav(): JSX.Element | null {
   }
 
   function toggleSidebarItem(el: HTMLElement | undefined, state: ReturnType<typeof useStore.getState>): void {
-    if (!el || el.dataset.sidebarType !== 'folder') return
+    if (!el) return
+    // #301: toggle a Daily/Weekly date group via the store's date-nav state.
+    const dateNavKey = el.dataset.sidebarDatenavKey
+    if (dateNavKey) {
+      state.toggleDateNav(dateNavKey)
+      return
+    }
+    if (el.dataset.sidebarType !== 'folder') return
     const collapseKey = el.dataset.sidebarKey
     if (collapseKey) state.toggleCollapseFolder(collapseKey)
   }
