@@ -2381,6 +2381,7 @@ interface Store {
     opts?: { folder?: NoteFolder; subpath?: string; title?: string; date?: Date }
   ) => Promise<void>
   saveActiveNoteAsTemplate: () => Promise<void>
+  saveActiveNoteAs: (newName: string) => Promise<void>
   setWordWrap: (on: boolean) => void
   setPreviewSmoothScroll: (on: boolean) => void
   setEditorMaxWidth: (px: number) => void
@@ -5843,6 +5844,36 @@ export const useStore = create<Store>((set, get) => {
     if (!trimmed) return
     const raw = composeTemplateFile({ name: trimmed, category: 'Custom', body: active.body })
     await get().saveCustomTemplate({ slug: slugifyTemplateName(trimmed), raw })
+  },
+
+  saveActiveNoteAs: async (newName: string) => {
+    const active = get().activeNote
+    const notePath = active?.path
+    if (!active || !notePath) return
+    // Strip a user-supplied extension so the name stays title-based; the backend
+    // appends the note's real file extension.
+    const trimmedName = newName.trim().replace(/\.md$/i, '')
+    if (!trimmedName || trimmedName === active.title) return
+    if (
+      typeof window.zen.duplicateNote !== 'function' ||
+      typeof window.zen.renameNote !== 'function'
+    ) {
+      return
+    }
+    try {
+      // Vim's :saveas writes the note under a new name and keeps the original.
+      // Save the current note, duplicate it (a copy in the same folder), rename
+      // the copy to the requested name, and open it — the original is untouched.
+      await get().persistNote(notePath)
+      const copy = await window.zen.duplicateNote(notePath)
+      const renamed = await window.zen.renameNote(copy.path, trimmedName)
+      await get().refreshNotes()
+      await get().selectNote(renamed.path)
+      get().setFocusedPanel('editor')
+      requestAnimationFrame(() => get().editorViewRef?.focus())
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : String(err))
+    }
   },
 
   setWordWrap: (on) => {

@@ -362,6 +362,11 @@ function registerVimCommands(): void {
   Vim.defineEx('write', 'w', () => {
     void useStore.getState().persistActive()
   })
+  Vim.defineEx('saveas', 'sav', (_cm: unknown, params: { argString?: string } | undefined) => {
+    const newName = (params?.argString ?? '').trim()
+    if (!newName) return
+    void useStore.getState().saveActiveNoteAs(newName)
+  })
   Vim.defineEx('format', 'format', () => {
     void useStore.getState().formatActiveNote()
   })
@@ -902,6 +907,8 @@ const MANUAL_EX_NAMES = new Set([
   'zenmode',
   'editmode',
   'splitmode',
+  'saveas',
+  'sav',
   'previewmode',
   'trash',
   'fold',
