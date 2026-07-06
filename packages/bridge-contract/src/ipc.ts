@@ -59,6 +59,9 @@ export const IPC = {
   VAULT_DUPLICATE_ASSET: 'vault:duplicate-asset',
   VAULT_DELETE_ASSET: 'vault:delete-asset',
   VAULT_RESTORE_DELETED_ASSET: 'vault:restore-deleted-asset',
+  VAULT_LIST_DELETED_ASSETS: 'vault:list-deleted-assets',
+  VAULT_PURGE_DELETED_ASSET: 'vault:purge-deleted-asset',
+  VAULT_EMPTY_DELETED_ASSETS: 'vault:empty-deleted-assets',
   VAULT_CREATE_FOLDER: 'vault:create-folder',
   VAULT_RENAME_FOLDER: 'vault:rename-folder',
   VAULT_DELETE_FOLDER: 'vault:delete-folder',
@@ -523,6 +526,8 @@ export interface DeletedAsset {
   name: string
   /** Opaque restore token returned by the desktop bridge. */
   undoToken: string
+  /** ISO timestamp of when the asset was deleted (present for 2.11+ deletes). */
+  deletedAt?: string
 }
 
 export interface ImportedAsset {

@@ -183,6 +183,9 @@ export interface ZenBridge {
   duplicateAsset(relPath: string): Promise<AssetMeta>
   deleteAsset(relPath: string): Promise<DeletedAsset>
   restoreDeletedAsset(asset: DeletedAsset): Promise<AssetMeta>
+  listDeletedAssets(): Promise<DeletedAsset[]>
+  purgeDeletedAsset(undoToken: string): Promise<void>
+  emptyDeletedAssets(): Promise<void>
   createFolder(folder: NoteFolder, subpath: string): Promise<void>
   renameFolder(folder: NoteFolder, oldSubpath: string, newSubpath: string): Promise<string>
   deleteFolder(folder: NoteFolder, subpath: string): Promise<void>

@@ -81,6 +81,9 @@ import {
   renameAsset,
   removeDemoTour,
   restoreDeletedAsset,
+  listDeletedAssets,
+  purgeDeletedAsset,
+  emptyDeletedAssets,
   restoreFromTrash,
   searchVaultTextCapabilities,
   searchVaultText,
@@ -2552,6 +2555,28 @@ function registerIpc(): void {
     }
     const v = requireVault()
     return await restoreDeletedAsset(v.root, deleted)
+  })
+
+  handle(IPC.VAULT_LIST_DELETED_ASSETS, async () => {
+    if (isRemoteWorkspaceActive()) return []
+    const v = requireVault()
+    return await listDeletedAssets(v.root)
+  })
+
+  handle(IPC.VAULT_PURGE_DELETED_ASSET, async (_e, undoToken: string) => {
+    if (isRemoteWorkspaceActive()) {
+      throw new Error('Asset deletion is only available for local vaults right now.')
+    }
+    const v = requireVault()
+    await purgeDeletedAsset(v.root, undoToken)
+  })
+
+  handle(IPC.VAULT_EMPTY_DELETED_ASSETS, async () => {
+    if (isRemoteWorkspaceActive()) {
+      throw new Error('Asset deletion is only available for local vaults right now.')
+    }
+    const v = requireVault()
+    await emptyDeletedAssets(v.root)
   })
 
   handle(

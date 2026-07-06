@@ -74,6 +74,10 @@ const LEGACY_ATTACHMENTS_DIRS = [PRIMARY_ATTACHMENTS_DIR, '_assets']
 const ATTACHMENTS_DIRS = [ASSETS_DIR, ...LEGACY_ATTACHMENTS_DIRS]
 const INTERNAL_VAULT_DIR = '.zennotes'
 const DELETED_ASSETS_DIR = 'deleted-assets'
+// Sidecar metadata written next to each deleted asset so it survives a restart
+// and can be listed + restored to its original location from the Trash view.
+// A dotfile with an app-specific name so it never collides with an asset file.
+const DELETED_ASSET_META = '.zn-deleted.json'
 const VAULT_SETTINGS_FILE = 'vault.json'
 const NOTE_META_CACHE_FILE = 'note-meta-cache-v1.json'
 const NOTE_META_CACHE_VERSION = 2
@@ -3328,8 +3332,61 @@ export async function deleteAsset(root: string, rel: string): Promise<DeletedAss
   const trashDir = resolveSafe(root, `${INTERNAL_VAULT_DIR}/${DELETED_ASSETS_DIR}/${undoToken}`)
   await fs.mkdir(trashDir, { recursive: true })
   const name = path.basename(source.abs)
+  const deletedAt = new Date().toISOString()
   await fs.rename(source.abs, path.join(trashDir, name))
-  return { path: source.rel, name, undoToken }
+  // Persist the original location so the asset can be listed + restored from the
+  // Trash view even after a restart (not just via the in-session undo stack).
+  await fs.writeFile(
+    path.join(trashDir, DELETED_ASSET_META),
+    JSON.stringify({ path: source.rel, name, deletedAt }, null, 2),
+    'utf8'
+  )
+  return { path: source.rel, name, undoToken, deletedAt }
+}
+
+/** Enumerate assets in the deleted-assets store that carry restore metadata,
+ *  newest first. Entries without metadata (pre-2.11 deletes) are skipped. */
+export async function listDeletedAssets(root: string): Promise<DeletedAsset[]> {
+  const baseDir = resolveSafe(root, `${INTERNAL_VAULT_DIR}/${DELETED_ASSETS_DIR}`)
+  let tokens: string[]
+  try {
+    tokens = await fs.readdir(baseDir)
+  } catch {
+    return []
+  }
+  const out: DeletedAsset[] = []
+  for (const undoToken of tokens) {
+    try {
+      const raw = await fs.readFile(path.join(baseDir, undoToken, DELETED_ASSET_META), 'utf8')
+      const meta = JSON.parse(raw) as { path?: unknown; name?: unknown; deletedAt?: unknown }
+      if (typeof meta.path !== 'string' || typeof meta.name !== 'string') continue
+      // The asset file itself must still be present to be restorable.
+      await fs.access(path.join(baseDir, undoToken, meta.name))
+      out.push({
+        path: meta.path,
+        name: meta.name,
+        undoToken,
+        deletedAt: typeof meta.deletedAt === 'string' ? meta.deletedAt : undefined
+      })
+    } catch {
+      // Missing/invalid metadata or file — not listable from the Trash view.
+    }
+  }
+  out.sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''))
+  return out
+}
+
+/** Permanently delete one asset from the deleted-assets store. */
+export async function purgeDeletedAsset(root: string, undoToken: string): Promise<void> {
+  const token = cleanDeletedAssetToken(undoToken)
+  const trashDir = resolveSafe(root, `${INTERNAL_VAULT_DIR}/${DELETED_ASSETS_DIR}/${token}`)
+  await fs.rm(trashDir, { recursive: true, force: true })
+}
+
+/** Permanently delete every asset in the deleted-assets store. */
+export async function emptyDeletedAssets(root: string): Promise<void> {
+  const baseDir = resolveSafe(root, `${INTERNAL_VAULT_DIR}/${DELETED_ASSETS_DIR}`)
+  await fs.rm(baseDir, { recursive: true, force: true }).catch(() => {})
 }
 
 export async function restoreDeletedAsset(root: string, deleted: DeletedAsset): Promise<AssetMeta> {

@@ -996,6 +996,18 @@ async function restoreDeletedAsset(_asset: DeletedAsset): Promise<AssetMeta> {
   throw new Error('Asset restore is only available in the desktop app right now.')
 }
 
+async function listDeletedAssets(): Promise<DeletedAsset[]> {
+  return []
+}
+
+async function purgeDeletedAsset(_undoToken: string): Promise<void> {
+  throw new Error('Asset deletion is only available in the desktop app right now.')
+}
+
+async function emptyDeletedAssets(): Promise<void> {
+  throw new Error('Asset deletion is only available in the desktop app right now.')
+}
+
 // Bucket for File objects "pretending" to be filesystem paths. The
 // renderer expects `getPathForFile` to return a string it can later
 // pass to `importFilesToNote`. On the web, we mint a synthetic token
@@ -1491,6 +1503,9 @@ export const httpBridge: ZenBridge = {
   duplicateAsset,
   deleteAsset,
   restoreDeletedAsset,
+  listDeletedAssets,
+  purgeDeletedAsset,
+  emptyDeletedAssets,
   createFolder,
   renameFolder,
   deleteFolder,
