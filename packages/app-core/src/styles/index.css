@@ -1470,7 +1470,7 @@ textarea,
 .cm-editor .cm-scroller {
   font-family: inherit;
   line-height: var(--z-editor-line-height, 1.7);
-  padding: 16px 0 35vh 0;
+  padding: 16px 0 20vh 0;
   overflow-y: auto;
   /* `auto` so long lines can scroll horizontally when word wrap is
      off — wrapping mode keeps things short and no scrollbar appears. */
