@@ -102,6 +102,15 @@ jobs:
         # defining USE_SYSTEM_FPM at all (even empty) makes electron-builder use
         # a system fpm, which the x64 runner doesn't have.
         run: |
+          # The GitHub Ubuntu runners ship pre-configured Microsoft/azure-cli apt
+          # repos (packages.microsoft.com) that intermittently serve a broken,
+          # unsigned InRelease, which makes `apt-get update` exit 100 and fails
+          # the Linux build for reasons unrelated to us. We only need the Ubuntu
+          # archives here, so drop those third-party lists first.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/*microsoft* \
+                     /etc/apt/sources.list.d/*azure* 2>/dev/null || true
           sudo apt-get update
           sudo apt-get install -y libarchive-tools
           if [ "${{ matrix.name }}" = "Linux arm64" ]; then
