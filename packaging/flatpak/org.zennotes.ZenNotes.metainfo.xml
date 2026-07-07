@@ -35,6 +35,11 @@
   </developer>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.11.0" date="2026-07-07">
+      <description>
+        <p>Task forwarding (the bullet-journal migrate gesture) and monthly notes, plus @time/@now and @ note-linking macros, o/O list continuation in Vim, :saveas, and a large batch of Vim and editor fixes.</p>
+      </description>
+    </release>
     <release version="2.10.0" date="2026-07-02">
       <description>
         <p>Transclusion — embed a note's rendered content inline with ![[Note]] in the reading view and PDF export — plus backlinks for standard Markdown links, reorderable database columns, opt-in persistent self-host sessions, a CLI renamed to zn so it no longer clashes with Zen Browser, and nine fixes.</p>
