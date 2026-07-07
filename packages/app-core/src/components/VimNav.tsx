@@ -711,22 +711,20 @@ export function VimNav(): JSX.Element | null {
         return
       }
 
-      // Cancel a pending leader sequence on Escape or a second leader press.
+      // Cancel a pending leader sequence on Escape.
       if (leaderPending.current && e.key === 'Escape') {
         e.preventDefault()
         e.stopImmediatePropagation()
         resetLeader()
         return
       }
-      if (
-        leaderPending.current &&
-        sequenceTokenFromEvent(e) === leaderToken
-      ) {
-        e.preventDefault()
-        e.stopImmediatePropagation()
-        resetLeader()
-        return
-      }
+      // A second press of the leader key is NOT cancelled here: it falls through
+      // to the pending-sequence blocks below so a <leader><leader> binding can
+      // fire when the leader is also the second key (e.g. Space Space). (#338)
+      // Remember that a leader was pending — an UNBOUND second leader press
+      // reaches the arm logic below, where it must dismiss the which-key rather
+      // than arm a fresh one.
+      const leaderWasPending = !!leaderPending.current
       // ------- Tasks / Tag view active → defer to its own window handler
       // Both panels install capture-phase window keydowns that handle
       // j/k/gg/G/Enter/x/Esc/etc. themselves, so we bail and let them — with
@@ -905,6 +903,15 @@ export function VimNav(): JSX.Element | null {
         return
       }
 
+      // #338: an unbound second leader press — a leader sequence was pending and
+      // no binding above consumed this key — dismisses the pending which-key
+      // rather than arming a new one. (A <leader><leader> binding is handled by
+      // the pending-sequence blocks above, which return before reaching here.)
+      if (leaderWasPending && sequenceTokenFromEvent(e) === leaderToken) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
       if (
         sequenceTokenFromEvent(e) === leaderToken &&
         !editorInsertMode &&
