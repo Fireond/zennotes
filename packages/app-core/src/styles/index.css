@@ -2782,6 +2782,25 @@ textarea,
   margin-top: -0.25em;
 }
 
+/* Strikethrough (`~~…~~`) around math. `.katex` renders as an inline-block,
+ * an atomic inline that a parent <del>/<s> line-through is not painted across
+ * (and setting `text-decoration` on `.katex` still won't cross its own nested
+ * inline-block glyph spans), so `~~$x$~~` left the rendered formula un-struck
+ * while surrounding prose was crossed out. Overlay a real line across the KaTeX
+ * box so struck math reads as struck. (#359) */
+:is(.prose-zen, .cm-editor) :is(del, s) .katex {
+  position: relative;
+}
+:is(.prose-zen, .cm-editor) :is(del, s) .katex::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 0.075em solid currentColor;
+  pointer-events: none;
+}
+
 :is(.prose-zen, .cm-editor) .local-image-embed {
   margin: 1.35rem 0;
 }
