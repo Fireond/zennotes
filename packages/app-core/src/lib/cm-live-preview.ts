@@ -16,6 +16,11 @@ import {
 } from './local-assets'
 import { setImageBlockDragPayload } from './image-block-dnd'
 import { assetTabPath } from './asset-tabs'
+import {
+  getExcalidrawPreview,
+  parseEmbedSizeHint,
+  resolveExcalidrawEmbedPath
+} from './excalidraw-preview'
 
 /**
  * Live-preview extension: hides markdown syntax markers on lines where
@@ -542,6 +547,104 @@ class LocalPdfWidget extends WidgetType {
   }
 }
 
+type ParsedExcalidraw = {
+  href: string
+  resolvedPath: string
+  width?: number
+  height?: number
+}
+
+function parseStandaloneLocalExcalidraw(lineText: string): ParsedExcalidraw | null {
+  const fromEmbed = lineText.match(STANDALONE_OBSIDIAN_EMBED_RE)
+  if (!fromEmbed) return null
+  const href = (fromEmbed[1] ?? '').trim()
+  if (classifyLocalAssetHref(href) !== 'excalidraw') return null
+  const state = useStore.getState()
+  const notePaths = state.notes.map((n) => n.path)
+  const resolvedPath = resolveExcalidrawEmbedPath(notePaths, href) ?? href
+  const hint = parseEmbedSizeHint(fromEmbed[2])
+  return {
+    href,
+    resolvedPath,
+    width: hint?.width,
+    height: hint?.height
+  }
+}
+
+/** Renders a `![[drawing.excalidraw]]` embed as an exported PNG image, like an
+ *  inline image block. Clicking opens the drawing in a dedicated Excalidraw
+ *  tab. The preview is produced lazily by excalidraw-preview.ts (exportToBlob)
+ *  and cached by path + mtime. */
+class LocalExcalidrawWidget extends WidgetType {
+  constructor(
+    private readonly notePath: string,
+    private readonly lineFrom: number,
+    private readonly lineTo: number,
+    private readonly href: string,
+    private readonly resolvedPath: string,
+    private readonly width?: number,
+    private readonly height?: number,
+    private readonly version = 0
+  ) {
+    super()
+  }
+
+  eq(other: LocalExcalidrawWidget): boolean {
+    return (
+      other.notePath === this.notePath &&
+      other.href === this.href &&
+      other.resolvedPath === this.resolvedPath &&
+      other.width === this.width &&
+      other.height === this.height &&
+      other.version === this.version
+    )
+  }
+
+  toDOM(): HTMLElement {
+    const figure = document.createElement('figure')
+    figure.className = 'local-image-embed cm-excalidraw-embed'
+
+    const frame = document.createElement('div')
+    frame.className = 'local-image-embed-frame'
+
+    const image = document.createElement('img')
+    image.className = 'local-image-embed-image excalidraw-embed-image'
+    image.alt = ''
+    image.loading = 'lazy'
+    image.draggable = false
+    const imgStyle = image.style
+    if (this.width) imgStyle.maxWidth = `${this.width}px`
+    if (this.height) imgStyle.maxHeight = `${this.height}px`
+
+    // Lazy-render the PNG and swap it in when ready.
+    void getExcalidrawPreview(this.resolvedPath).then((url) => {
+      if (url) image.src = url
+    })
+
+    // Click anywhere on the image opens the drawing in a new Excalidraw tab.
+    image.style.cursor = 'pointer'
+    image.addEventListener('click', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      void useStore.getState().openNoteInTab(assetTabPath(this.resolvedPath))
+    })
+
+    frame.append(image)
+
+    const caption = document.createElement('figcaption')
+    caption.className = 'local-image-embed-caption'
+    caption.textContent =
+      decodeURIComponentSafe(this.href.split('/').filter(Boolean).pop()) || 'Drawing'
+
+    figure.append(frame, caption)
+    return figure
+  }
+
+  ignoreEvent(): boolean {
+    return true
+  }
+}
+
 /** Renders a GFM task-list marker (`[ ]` / `[x]` / `[X]`) as a clickable
  *  checkbox. The widget rewrites the underlying markdown when toggled — the
  *  same single-character mutation the Preview pane uses, so the on-disk
@@ -696,6 +799,43 @@ function computeDecorations(view: EditorView): DecorationSet {
             deco: imageSourceHide
           })
           // Collapse the now text-less line's strut (see imageEmbedLine).
+          pending.push({
+            from: line.from,
+            to: line.from,
+            deco: imageEmbedLine
+          })
+        }
+        continue
+      }
+      const parsedExcalidraw = parseStandaloneLocalExcalidraw(line.text)
+      if (parsedExcalidraw) {
+        const st = useStore.getState()
+        const notePath = st.activeNote?.path
+        if (!notePath) continue
+        replacedLines.add(lineNo)
+        pending.push({
+          from: line.to,
+          to: line.to,
+          deco: Decoration.widget({
+            side: 1,
+            widget: new LocalExcalidrawWidget(
+              notePath,
+              line.from,
+              line.to,
+              parsedExcalidraw.href,
+              parsedExcalidraw.resolvedPath,
+              parsedExcalidraw.width,
+              parsedExcalidraw.height,
+              st.excalidrawPreviewVersion
+            )
+          })
+        })
+        if (!lineActive) {
+          pending.push({
+            from: line.from,
+            to: line.to,
+            deco: imageSourceHide
+          })
           pending.push({
             from: line.from,
             to: line.from,
@@ -916,7 +1056,12 @@ export const livePreviewPlugin = ViewPlugin.fromClass(
           // (or anywhere other than the note's own directory) bakes in
           // the wrong URL on the very first decoration pass and stays
           // broken until you re-trigger a recompute by editing.
-          state.assetFiles !== prev.assetFiles
+          state.assetFiles !== prev.assetFiles ||
+          // Notes list arriving late lets Excalidraw embed targets resolve
+          // to a vault-relative path; and a bumped version means a drawing
+          // was edited elsewhere and the cached preview must refresh.
+          state.notes !== prev.notes ||
+          state.excalidrawPreviewVersion !== prev.excalidrawPreviewVersion
         ) {
           view.dispatch({ effects: refreshLivePreviewEffect.of(null) })
         }

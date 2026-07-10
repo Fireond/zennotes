@@ -2972,6 +2972,47 @@ textarea,
   line-height: 1.4;
 }
 
+/* --- Excalidraw embed (CodeMirror live preview + preview pane) --------- */
+.cm-editor .cm-excalidraw-embed {
+  display: block;
+  width: 100%;
+  max-width: min(100%, 980px);
+  margin: 0.5rem 0 0.6rem;
+}
+
+:is(.prose-zen, .cm-editor) .excalidraw-embed-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  display: block;
+  object-fit: contain;
+}
+
+.excalidraw-embed-host {
+  margin: 0.75rem 0;
+}
+
+.excalidraw-embed-preview {
+  cursor: pointer;
+}
+
+.excalidraw-embed-loading {
+  min-height: 80px;
+  border-radius: 0.5rem;
+  background: theme("colors.paper.200");
+  animation: excalidraw-embed-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes excalidraw-embed-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
 /* --- PDF embed widget (CodeMirror live preview) ---------------------- */
 .cm-editor .cm-local-pdf-embed,
 .cm-editor .local-pdf-embed {

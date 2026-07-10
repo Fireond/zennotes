@@ -76,7 +76,7 @@ export const HELP_QUICK_START: HelpCard[] = [
   {
     title: 'Use files without leaving ZenNotes',
     body:
-      'Images, SVGs, PDFs, audio, video, and other local files can appear in the vault tree and open in ZenNotes tabs or reference panes. The files stay ordinary vault files, but opening them does not have to bounce you out to another app.'
+      'Images, SVGs, PDFs, audio, video, Excalidraw drawings, and other local files can appear in the vault tree and open in ZenNotes tabs or reference panes. The files stay ordinary vault files, but opening them does not have to bounce you out to another app.'
   },
   {
     title: 'Pick up where you left off',
@@ -109,7 +109,12 @@ export const HELP_HOW_TO_GUIDES: HelpCard[] = [
   {
     title: 'Make and edit your own templates',
     body:
-      'Open Settings → Templates. Press “New template” to author one: a template is just markdown with optional YAML frontmatter (`name`, `description`, `category`, `titleTemplate`, `targetFolder`, `targetSubpath`) and a body. Use the variables `{{title}}`, `{{date}}`, `{{date:YYYY-MM-DD}}` (any moment-style format), `{{time}}`, `{{week}}`, and `{{cursor}}` (where the caret lands). Custom templates are saved as plain `.md` files under `.zennotes/templates/`. You can also fork a built-in by pressing Edit on it — that creates an editable copy that shadows the original, and Reset restores the built-in. From any note, the “Save Current Note as Template…” command captures it as a new template.'
+      'Open Settings → Templates. Press "New template" to author one: a template is just markdown with optional YAML frontmatter (`name`, `description`, `category`, `titleTemplate`, `targetFolder`, `targetSubpath`) and a body. Use the variables `{{title}}`, `{{date}}`, `{{date:YYYY-MM-DD}}` (any moment-style format), `{{time}}`, `{{week}}`, and `{{cursor}}` (where the caret lands). Custom templates are saved as plain `.md` files under `.zennotes/templates/`. You can also fork a built-in by pressing Edit on it — that creates an editable copy that shadows the original, and Reset restores the built-in. From any note, the "Save Current Note as Template…" command captures it as a new template.'
+  },
+  {
+    title: 'Draw diagrams with Excalidraw',
+    body:
+      'Run "New Drawing" from the command palette to create a `.excalidraw` file and open it in a built-in Excalidraw editor tab. Drawings are first-class vault files — they appear in the sidebar, can be moved and archived like notes, and auto-refresh when edited. To embed a drawing inside a note, use "Embed Existing Drawing…" (pick from a searchable list) or "Embed New Drawing" (create one at the cursor and switch to its editor). The embed syntax is `![[name.excalidraw]]`, the same as images, and supports optional size hints like `![[name.excalidraw|600]]` or `![[name.excalidraw|600x400]]`. Clicking an embed opens the drawing in a new tab. Obsidian-style `.excalidraw.md` files are also supported.'
   },
   {
     title: 'Turn a CSV into a database',
@@ -282,7 +287,7 @@ export const HELP_CORE_CONCEPTS: HelpCard[] = [
   {
     title: 'Links are actionable',
     body:
-      'Use [[wikilinks]] or markdown links. Following a link — click it, Cmd/Ctrl-click it, or use the follow-link motion (`gd`) in normal mode — opens the note under the cursor and pins PDFs into the reference pane. If the note does not exist yet, following the link offers to create it (after you confirm) rather than leaving a dead link. Prefix a wikilink with `!` to embed rather than link: `![[Note]]` inlines the target note content in the reading view and PDF export — recursively, with cycle protection — so a master note can pull in sub-notes and export to PDF as one document. `![[image.png]]` embeds an image.'
+      'Use [[wikilinks]] or markdown links. Following a link — click it, Cmd/Ctrl-click it, or use the follow-link motion (`gd`) in normal mode — opens the note under the cursor and pins PDFs into the reference pane. If the note does not exist yet, following the link offers to create it (after you confirm) rather than leaving a dead link. Prefix a wikilink with `!` to embed rather than link: `![[Note]]` inlines the target note content in the reading view and PDF export — recursively, with cycle protection — so a master note can pull in sub-notes and export to PDF as one document. `![[image.png]]` embeds an image, and `![[drawing.excalidraw]]` embeds an Excalidraw drawing as a PNG preview.'
   },
   {
     title: 'Files stay local',
@@ -298,6 +303,11 @@ export const HELP_CORE_CONCEPTS: HelpCard[] = [
     title: 'The CLI is the bridge to launchers',
     body:
       'The `zn` command-line tool can list, read, search, capture, edit, archive, trash, inspect tasks, and start the MCP server without the app running. Raycast uses it for search, then uses `zennotes://open` and `zennotes://open-window` links to bring the selected note back into ZenNotes. On macOS, Settings → CLI can install the bundled Raycast extension locally so users do not need to wait for the Raycast Store version.'
+  },
+  {
+    title: 'Excalidraw drawings are first-class files',
+    body:
+      'A `.excalidraw` file is a note type alongside Markdown and databases — listed in the sidebar, opened in a dedicated Excalidraw editor tab, and saved back as JSON. Embed one inside a note with `![[drawing.excalidraw]]` (same syntax as images, with optional `|width` or `|WxH` size hints). The embed renders as a PNG preview in both the editor and reading view, refreshes live when the drawing is edited, and opens in a new tab on click. Obsidian `.excalidraw.md` files are also recognized.'
   },
   {
     title: 'Math, diagrams, and plots render from plain fences',

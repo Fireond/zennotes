@@ -57,6 +57,29 @@ describe('renderMarkdown', () => {
     expect(html).toContain('alt="CleanShot 2026-04-13 at 14.31.31@2x.png"')
   })
 
+  it('renders excalidraw embeds as placeholder divs', () => {
+    const html = renderMarkdown('![[diagram.excalidraw]]')
+
+    expect(html).toContain('data-excalidraw-embed="diagram.excalidraw"')
+    expect(html).toContain('class="excalidraw-embed-host"')
+    expect(html).not.toContain('<img')
+  })
+
+  it('parses size hints on excalidraw embeds', () => {
+    const html = renderMarkdown('![[diagram.excalidraw|600x400]]')
+
+    expect(html).toContain('data-excalidraw-embed="diagram.excalidraw"')
+    expect(html).toContain('data-embed-width="600"')
+    expect(html).toContain('data-embed-height="400"')
+  })
+
+  it('renders excalidraw embeds without size hint when label is the target', () => {
+    const html = renderMarkdown('![[diagram.excalidraw]]')
+
+    expect(html).not.toContain('data-embed-width')
+    expect(html).not.toContain('data-embed-height')
+  })
+
   it('renders ==text== as <mark> (and survives the sanitizer)', () => {
     expect(renderMarkdown('==highlighted==')).toContain('<mark>highlighted</mark>')
     const two = renderMarkdown('==a== and ==b==')

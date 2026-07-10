@@ -15,6 +15,7 @@ import type { Root as MdRoot } from 'mdast'
 import type { Root as HastRoot, Element as HastElement } from 'hast'
 import { recordRendererPerf } from './perf'
 import { classifyLocalAssetHref } from './local-assets'
+import { parseEmbedSizeHint } from './excalidraw-preview'
 import { parseColWidthsComment } from './markdown-table'
 
 /**
@@ -31,6 +32,9 @@ const ALLOWED_RENDERED_URI_RE =
 const ALLOWED_RENDERED_DATA_ATTRS = [
   'data-callout',
   'data-embed-src',
+  'data-embed-height',
+  'data-embed-width',
+  'data-excalidraw-embed',
   'data-function-plot-source',
   'data-jsxgraph-source',
   'data-local-asset-href',
@@ -80,6 +84,16 @@ function remarkWikilinks() {
         url: target,
         title: null,
         alt: label
+      }
+    }
+    if (bang === '!' && assetKind === 'excalidraw') {
+      const size = parseEmbedSizeHint(label)
+      const w = size?.width ? ` data-embed-width="${size.width}"` : ''
+      const h = size?.height ? ` data-embed-height="${size.height}"` : ''
+      const safeTarget = target.replace(/"/g, '&quot;')
+      return {
+        type: 'html',
+        value: `<div class="excalidraw-embed-host" data-excalidraw-embed="${safeTarget}"${w}${h}></div>`
       }
     }
     if (bang === '!' && assetKind) {

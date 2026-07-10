@@ -171,6 +171,11 @@ const TemplatePalette = lazy(async () => {
   return { default: module.TemplatePalette }
 })
 
+const EmbedDrawingPalette = lazy(async () => {
+  const module = await import('./components/EmbedDrawingPalette')
+  return { default: module.EmbedDrawingPalette }
+})
+
 const SettingsModal = lazy(async () => {
   const module = await import('./components/SettingsModal')
   return { default: module.SettingsModal }
@@ -257,6 +262,8 @@ function App(): JSX.Element {
   const setOutlinePaletteOpen = useStore((s) => s.setOutlinePaletteOpen)
   const templatePaletteOpen = useStore((s) => s.templatePaletteOpen)
   const setTemplatePaletteOpen = useStore((s) => s.setTemplatePaletteOpen)
+  const embedDrawingPaletteOpen = useStore((s) => s.embedDrawingPaletteOpen)
+  const setEmbedDrawingPaletteOpen = useStore((s) => s.setEmbedDrawingPaletteOpen)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const noteListOpen = useStore((s) => s.noteListOpen)
   const zenMode = useStore((s) => s.zenMode)
@@ -686,6 +693,11 @@ function App(): JSX.Element {
         focusEditorNormalMode()
         return
       }
+      if (e.key === 'Escape' && state.embedDrawingPaletteOpen) {
+        setEmbedDrawingPaletteOpen(false)
+        focusEditorNormalMode()
+        return
+      }
       if (e.key === 'Escape' && state.outlinePaletteOpen) {
         setOutlinePaletteOpen(false)
         focusEditorNormalMode()
@@ -771,6 +783,7 @@ function App(): JSX.Element {
         state.commandPaletteOpen ||
         state.bufferPaletteOpen ||
         state.templatePaletteOpen ||
+        state.embedDrawingPaletteOpen ||
         state.outlinePaletteOpen ||
         document.querySelector('[data-ctx-menu]') ||
         document.querySelector('[data-prompt-modal]') ||
@@ -804,6 +817,7 @@ function App(): JSX.Element {
     setCommandPaletteOpen,
     setOutlinePaletteOpen,
     setTemplatePaletteOpen,
+    setEmbedDrawingPaletteOpen,
     setSearchOpen,
     setVaultTextSearchOpen
   ])
@@ -926,6 +940,11 @@ function App(): JSX.Element {
       {templatePaletteOpen && (
         <Suspense fallback={null}>
           <TemplatePalette />
+        </Suspense>
+      )}
+      {embedDrawingPaletteOpen && (
+        <Suspense fallback={null}>
+          <EmbedDrawingPalette />
         </Suspense>
       )}
       {settingsOpen && (
