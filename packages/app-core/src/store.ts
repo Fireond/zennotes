@@ -5216,12 +5216,26 @@ export const useStore = create<Store>((set, get) => {
       if (get().noteDirty[path]) {
         throw new Error('Could not save the note before exporting the PDF.')
       }
-      await window.zen.exportNotePdf(path)
+      const pdfPath = await window.zen.exportNotePdf(path)
+      // A returned path means a real file was written on disk — desktop only.
+      // Web returns null (it navigates the prepared window to a print view, which
+      // is the feedback there, so we must NOT close that window), and desktop
+      // returns null when the save dialog is cancelled. Only then confirm + offer
+      // to reveal the file. (#257)
+      if (pdfPath) {
+        const { useToastStore } = await import('./lib/toast')
+        useToastStore.getState().addToast('PDF exported', 'success', {
+          label: 'Show in folder',
+          onClick: () => void window.zen.revealFilePath(pdfPath)
+        })
+      }
     } catch (err) {
       preparedExportWindow?.close()
       console.error('exportNotePdf failed', err)
-      window.alert(
-        err instanceof Error ? err.message : 'Could not export the note as a PDF.'
+      const { useToastStore } = await import('./lib/toast')
+      useToastStore.getState().addToast(
+        err instanceof Error ? err.message : 'Could not export the note as a PDF.',
+        'error'
       )
     }
   },
