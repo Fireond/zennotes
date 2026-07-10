@@ -124,6 +124,10 @@ type SettingsSectionId = "look" | "editing" | "vault" | "system";
 interface SettingsSubTab {
   id: string;
   title: string;
+  /** Shown in the modal header while this sub-tab is active, so the summary
+   *  stays accurate as you move between sub-tabs. Falls back to the category
+   *  description when omitted. */
+  description?: string;
   /** Search-item ids that live on this sub-tab, so search-jump can open the right one. */
   searchIds?: string[];
   content: JSX.Element;
@@ -440,6 +444,8 @@ export function SettingsModal(): JSX.Element {
   const setQuickNoteTitlePrefix = useStore((s) => s.setQuickNoteTitlePrefix);
   const wordWrap = useStore((s) => s.wordWrap);
   const setWordWrap = useStore((s) => s.setWordWrap);
+  const cursorBlink = useStore((s) => s.cursorBlink);
+  const setCursorBlink = useStore((s) => s.setCursorBlink);
   const previewSmoothScroll = useStore((s) => s.previewSmoothScroll);
   const setPreviewSmoothScroll = useStore((s) => s.setPreviewSmoothScroll);
   const editorMaxWidth = useStore((s) => s.editorMaxWidth);
@@ -1693,6 +1699,12 @@ export function SettingsModal(): JSX.Element {
           targetId: leaderHintDurationTargetId,
         },
         {
+          id: "scroll-off",
+          title: "Scroll offset",
+          description: "Vim scrolloff — lines kept above and below the cursor.",
+          keywords: ["scroll", "scrolloff", "vim", "cursor", "margin"],
+        },
+        {
           id: "vault-text-search-backend",
           title: "Vault text search backend",
           description:
@@ -1769,6 +1781,21 @@ export function SettingsModal(): JSX.Element {
           keywords: ["wrap", "line wrap"],
         },
         {
+          id: "cursor-blink",
+          title: "Blinking cursor",
+          description:
+            "Blink the editor caret and Vim block cursor, or keep it solid.",
+          keywords: [
+            "cursor",
+            "caret",
+            "blink",
+            "blinking",
+            "solid",
+            "non-blinking",
+            "accessibility",
+          ],
+        },
+        {
           id: "smooth-preview-scroll",
           title: "Smooth preview scroll",
           description:
@@ -1781,6 +1808,20 @@ export function SettingsModal(): JSX.Element {
           description:
             "Compact keeps the editor focused. Full inlines the PDF viewer under your cursor.",
           keywords: ["pdf", "embed"],
+        },
+        {
+          id: "time-format",
+          title: "Time format",
+          description: "Clock format the @time macro inserts.",
+          keywords: [
+            "time",
+            "clock",
+            "12 hour",
+            "24 hour",
+            "@time",
+            "now",
+            "macro",
+          ],
         },
         {
           id: "date-titled-quick-notes",
@@ -1813,6 +1854,7 @@ export function SettingsModal(): JSX.Element {
             "leader-key-hints",
             "leader-hint-behavior",
             "leader-hint-duration",
+            "scroll-off",
           ],
           content: (
             <div className="space-y-6">
@@ -1843,6 +1885,17 @@ export function SettingsModal(): JSX.Element {
                       value={vimYankToClipboard}
                       settingId="vim-yank-to-clipboard"
                       onChange={setVimYankToClipboard}
+                    />
+                    <SliderRow
+                      label="Scroll offset"
+                      description="Vim scrolloff — lines kept above and below the cursor while scrolling. 0 disables it."
+                      value={editorScrollOff}
+                      min={0}
+                      max={20}
+                      step={1}
+                      unit=" lines"
+                      settingId="scroll-off"
+                      onChange={setEditorScrollOff}
                     />
                     <ToggleRow
                       label="Leader key hints"
@@ -1967,8 +2020,10 @@ export function SettingsModal(): JSX.Element {
             "note-tabs",
             "wrap-note-tabs",
             "word-wrap",
+            "cursor-blink",
             "smooth-preview-scroll",
             "pdfs-in-edit-mode",
+            "time-format",
           ],
           content: (
             <div className="space-y-6">
@@ -2021,6 +2076,13 @@ export function SettingsModal(): JSX.Element {
                   onChange={setWordWrap}
                 />
                 <ToggleRow
+                  label="Blinking cursor"
+                  description="Blink the editor caret and the Vim block cursor. Turn off for a solid cursor, e.g. to match the macOS 'Prefer non-blinking cursor' accessibility setting."
+                  value={cursorBlink}
+                  settingId="cursor-blink"
+                  onChange={setCursorBlink}
+                />
+                <ToggleRow
                   label="Smooth preview scroll"
                   description="Animate Ctrl+D / Ctrl+U half-page jumps in preview mode. Turn off for an instant snap that keeps position predictable."
                   value={previewSmoothScroll}
@@ -2037,6 +2099,17 @@ export function SettingsModal(): JSX.Element {
                     { value: "full", label: "Full" },
                   ]}
                   onChange={(next) => setPdfEmbedInEditMode(next)}
+                />
+                <SegmentedRow
+                  label="Time format"
+                  description="Clock format the @time macro inserts (@time / @now in a note)."
+                  value={timeFormat}
+                  settingId="time-format"
+                  options={[
+                    { value: "12h", label: "12-hour" },
+                    { value: "24h", label: "24-hour" },
+                  ]}
+                  onChange={(next) => setTimeFormat(next)}
                 />
                 <ToggleRow
                   label="Date-titled Quick Notes"
@@ -2212,26 +2285,6 @@ export function SettingsModal(): JSX.Element {
           keywords: ["spacing"],
         },
         {
-          id: "scroll-off",
-          title: "Scroll offset",
-          description: "Vim scrolloff — lines kept above and below the cursor.",
-          keywords: ["scroll", "scrolloff", "vim", "cursor", "margin"],
-        },
-        {
-          id: "time-format",
-          title: "Time format",
-          description: "Clock format the @time macro inserts.",
-          keywords: [
-            "time",
-            "clock",
-            "12 hour",
-            "24 hour",
-            "@time",
-            "now",
-            "macro",
-          ],
-        },
-        {
           id: "reading-width",
           title: "Reading width",
           description: "Maximum width for preview and split-preview content.",
@@ -2324,28 +2377,6 @@ export function SettingsModal(): JSX.Element {
               format={(v) => v.toFixed(2)}
             />
             <SliderRow
-              label="Scroll offset"
-              description="Vim scrolloff — lines kept above and below the cursor while scrolling. 0 disables it."
-              value={editorScrollOff}
-              min={0}
-              max={20}
-              step={1}
-              unit=" lines"
-              settingId="scroll-off"
-              onChange={setEditorScrollOff}
-            />
-            <SegmentedRow
-              label="Time format"
-              description="Clock format the @time macro inserts (@time / @now in a note)."
-              value={timeFormat}
-              settingId="time-format"
-              options={[
-                { value: "12h", label: "12-hour" },
-                { value: "24h", label: "24-hour" },
-              ]}
-              onChange={(next) => setTimeFormat(next)}
-            />
-            <SliderRow
               label="Reading width"
               description="Maximum width for preview and split-preview content."
               value={previewMaxWidth}
@@ -2410,7 +2441,8 @@ export function SettingsModal(): JSX.Element {
     {
       id: "vault",
       title: "Vault",
-      description: "Current vault location and root-folder controls.",
+      description:
+        "Vault location, note organization, periodic notes, and folder labels.",
       keywords: ["folder", "root", "location", "open vault", "change"],
       searchItems: [
         {
@@ -2744,6 +2776,7 @@ export function SettingsModal(): JSX.Element {
         {
           id: "location",
           title: "Location",
+          description: "Where this vault lives, plus saved remote connections.",
           searchIds: ["vault-location", "saved-remote-workspaces"],
           content: (
             <div className="space-y-6">
@@ -2913,8 +2946,130 @@ export function SettingsModal(): JSX.Element {
         {
           id: "notes",
           title: "Notes",
+          description:
+            "How primary notes, new drawings and databases, and view preferences are organized.",
+          searchIds: ["primary-notes-location", "view-settings-scope"],
+          content: (
+            <div className="space-y-6">
+              <Section
+                title="Primary Notes"
+                description="Choose whether ZenNotes treats `inbox/` as the main notes area or uses the vault root directly for Obsidian-style flat vaults."
+              >
+                <SegmentedRow
+                  label="Primary notes location"
+                  description="`Inbox` keeps ZenNotes' original lifecycle structure. `Vault root` surfaces top-level markdown files and folders directly."
+                  value={vaultSettings.primaryNotesLocation}
+                  settingId="primary-notes-location"
+                  options={[
+                    { value: "inbox", label: "Inbox" },
+                    { value: "root", label: "Vault root" },
+                  ]}
+                  onChange={(primaryNotesLocation) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      primaryNotesLocation,
+                    })
+                  }
+                />
+              </Section>
+              <Section
+                title="New Drawings & Databases"
+                description="Where new Excalidraw drawings and databases are created, so they don't clutter the root of your vault."
+              >
+                <SegmentedRow
+                  label="Default drawings location"
+                  description="`Primary location` uses your primary notes area, `Active note's folder` puts it beside the note you're viewing, `Specific folder` uses a subfolder you choose."
+                  value={vaultSettings.drawingsLocation?.mode ?? "primary"}
+                  settingId="drawings-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      drawingsLocation: { ...vaultSettings.drawingsLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.drawingsLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Drawings folder"
+                    description="Vault-relative subfolder for new drawings, e.g. `assets/drawings`."
+                    value={vaultSettings.drawingsLocation?.folder ?? ""}
+                    placeholder="assets/drawings"
+                    settingId="drawings-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        drawingsLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+                <SegmentedRow
+                  label="Default databases location"
+                  description="Same options as drawings, applied to new databases."
+                  value={vaultSettings.databasesLocation?.mode ?? "primary"}
+                  settingId="databases-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      databasesLocation: { ...vaultSettings.databasesLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.databasesLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Databases folder"
+                    description="Vault-relative subfolder for new databases, e.g. `assets/databases`."
+                    value={vaultSettings.databasesLocation?.folder ?? ""}
+                    placeholder="assets/databases"
+                    settingId="databases-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        databasesLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+              </Section>
+              <Section
+                title="View settings"
+                description="Whether note-list & view preferences are shared across all vaults or kept per vault."
+              >
+                <SegmentedRow
+                  label="Apply view settings"
+                  description="`Global` uses one set of view preferences (sort order, grouping, the Tasks view, kanban columns, …) everywhere. `Per vault` lets each vault keep its own, saved in its `.zennotes/`."
+                  value={viewSettingsScope}
+                  settingId="view-settings-scope"
+                  options={[
+                    { value: "global", label: "Global" },
+                    { value: "vault", label: "Per vault" },
+                  ]}
+                  onChange={(next) =>
+                    setViewSettingsScope(next as "global" | "vault")
+                  }
+                />
+              </Section>
+            </div>
+          ),
+        },
+        {
+          id: "periodic",
+          title: "Periodic notes",
+          description:
+            "Daily, weekly, and monthly note workflows, plus the calendar panel.",
           searchIds: [
-            "primary-notes-location",
             "enable-daily-notes",
             "daily-notes-directory",
             "daily-note-title-pattern",
@@ -2945,46 +3100,6 @@ export function SettingsModal(): JSX.Element {
           ],
           content: (
             <div className="space-y-6">
-              <Section
-                title="Primary Notes"
-                description="Choose whether ZenNotes treats `inbox/` as the main notes area or uses the vault root directly for Obsidian-style flat vaults."
-              >
-                <SegmentedRow
-                  label="Primary notes location"
-                  description="`Inbox` keeps ZenNotes' original lifecycle structure. `Vault root` surfaces top-level markdown files and folders directly."
-                  value={vaultSettings.primaryNotesLocation}
-                  settingId="primary-notes-location"
-                  options={[
-                    { value: "inbox", label: "Inbox" },
-                    { value: "root", label: "Vault root" },
-                  ]}
-                  onChange={(primaryNotesLocation) =>
-                    void persistVaultSettings({
-                      ...vaultSettings,
-                      primaryNotesLocation,
-                    })
-                  }
-                />
-              </Section>
-              <Section
-                title="View settings"
-                description="Whether note-list & view preferences are shared across all vaults or kept per vault."
-              >
-                <SegmentedRow
-                  label="Apply view settings"
-                  description="`Global` uses one set of view preferences (sort order, grouping, the Tasks view, kanban columns, …) everywhere. `Per vault` lets each vault keep its own, saved in its `.zennotes/`."
-                  value={viewSettingsScope}
-                  settingId="view-settings-scope"
-                  options={[
-                    { value: "global", label: "Global" },
-                    { value: "vault", label: "Per vault" },
-                  ]}
-                  onChange={(next) =>
-                    setViewSettingsScope(next as "global" | "vault")
-                  }
-                />
-              </Section>
-
               <Section
                 title="Daily Notes"
                 description="Create one note per day with a simple date title and keep them in a dedicated directory."
@@ -3510,8 +3625,10 @@ export function SettingsModal(): JSX.Element {
           ),
         },
         {
-          id: "system",
-          title: "System",
+          id: "folders",
+          title: "Folders",
+          description:
+            "Rename the built-in folders and the Tasks view as they appear in the UI.",
           searchIds: [
             "inbox-label",
             "quick-notes-label",
@@ -4088,6 +4205,19 @@ export function SettingsModal(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleSettingResultId]);
 
+  // Header summary follows the active sub-tab so it describes what's actually on
+  // screen, instead of always showing the category's first-sub-tab blurb.
+  const activeSubTabForHeader = visibleCategory?.subTabs?.find(
+    (tab) =>
+      tab.id ===
+      (activeSubTabByCategory[visibleCategory.id] ??
+        visibleCategory.subTabs?.[0]?.id),
+  );
+  const headerDescription =
+    activeSubTabForHeader?.description ??
+    visibleCategory?.description ??
+    "Search the navigation on the left to jump to a settings section.";
+
   return (
     <>
       <div
@@ -4250,8 +4380,7 @@ export function SettingsModal(): JSX.Element {
                   {visibleCategory?.title ?? "Settings"}
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-500">
-                  {visibleCategory?.description ??
-                    "Search the navigation on the left to jump to a settings section."}
+                  {headerDescription}
                 </p>
               </div>
               <Button

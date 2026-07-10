@@ -15,6 +15,8 @@ import { TitleBar } from './components/TitleBar'
 import { PromptHost } from './components/PromptHost'
 import { ConfirmHost } from './components/ConfirmHost'
 import { ServerDirectoryPickerHost } from './components/ServerDirectoryPickerHost'
+import { ToastHost } from './components/ui'
+import { ExcalidrawEmbedMenuHost } from './components/ExcalidrawEmbedMenuHost'
 import { resolveQuickNoteTitle } from './lib/quick-note-title'
 import { isMacPlatform, matchesShortcut, matchesSequenceToken } from './lib/keymaps'
 import { focusPaneOrEdgePanel } from './lib/pane-nav'
@@ -170,6 +172,11 @@ const TemplatePalette = lazy(async () => {
   return { default: module.TemplatePalette }
 })
 
+const EmbedDrawingPalette = lazy(async () => {
+  const module = await import('./components/EmbedDrawingPalette')
+  return { default: module.EmbedDrawingPalette }
+})
+
 const SettingsModal = lazy(async () => {
   const module = await import('./components/SettingsModal')
   return { default: module.SettingsModal }
@@ -256,6 +263,8 @@ function App(): JSX.Element {
   const setOutlinePaletteOpen = useStore((s) => s.setOutlinePaletteOpen)
   const templatePaletteOpen = useStore((s) => s.templatePaletteOpen)
   const setTemplatePaletteOpen = useStore((s) => s.setTemplatePaletteOpen)
+  const embedDrawingPaletteOpen = useStore((s) => s.embedDrawingPaletteOpen)
+  const setEmbedDrawingPaletteOpen = useStore((s) => s.setEmbedDrawingPaletteOpen)
   const sidebarOpen = useStore((s) => s.sidebarOpen)
   const noteListOpen = useStore((s) => s.noteListOpen)
   const zenMode = useStore((s) => s.zenMode)
@@ -445,6 +454,7 @@ function App(): JSX.Element {
     const html = document.documentElement
     const mql = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = (): void => {
+      const prevMode = html.dataset.themeMode
       const prefersDark = mql.matches
       if (isCustomThemeId(themeId)) {
         const slug = customThemeSlugFromId(themeId)
@@ -456,6 +466,14 @@ function App(): JSX.Element {
         const id = themeMode === 'auto' ? resolveAuto(themeFamily, prefersDark, themeId) : themeId
         html.dataset.theme = id
         html.dataset.themeMode = findTheme(id).mode
+      }
+      // Excalidraw embed previews are exported light/dark to match the theme;
+      // re-render them when the resolved mode flips so a dark note never shows a
+      // white drawing. (#363)
+      if (prevMode && prevMode !== html.dataset.themeMode) {
+        useStore.setState((s) => ({
+          excalidrawPreviewVersion: s.excalidrawPreviewVersion + 1
+        }))
       }
     }
     apply()
@@ -685,6 +703,11 @@ function App(): JSX.Element {
         focusEditorNormalMode()
         return
       }
+      if (e.key === 'Escape' && state.embedDrawingPaletteOpen) {
+        setEmbedDrawingPaletteOpen(false)
+        focusEditorNormalMode()
+        return
+      }
       if (e.key === 'Escape' && state.outlinePaletteOpen) {
         setOutlinePaletteOpen(false)
         focusEditorNormalMode()
@@ -770,6 +793,7 @@ function App(): JSX.Element {
         state.commandPaletteOpen ||
         state.bufferPaletteOpen ||
         state.templatePaletteOpen ||
+        state.embedDrawingPaletteOpen ||
         state.outlinePaletteOpen ||
         document.querySelector('[data-ctx-menu]') ||
         document.querySelector('[data-prompt-modal]') ||
@@ -803,6 +827,7 @@ function App(): JSX.Element {
     setCommandPaletteOpen,
     setOutlinePaletteOpen,
     setTemplatePaletteOpen,
+    setEmbedDrawingPaletteOpen,
     setSearchOpen,
     setVaultTextSearchOpen
   ])
@@ -859,6 +884,8 @@ function App(): JSX.Element {
         </Suspense>
         <PromptHost />
         <ConfirmHost />
+        <ToastHost />
+        <ExcalidrawEmbedMenuHost />
         <ServerDirectoryPickerHost />
         <AppUpdateNotice hidden={zenMode} />
       </div>
@@ -874,6 +901,8 @@ function App(): JSX.Element {
         </Suspense>
         <PromptHost />
         <ConfirmHost />
+        <ToastHost />
+        <ExcalidrawEmbedMenuHost />
         <ServerDirectoryPickerHost />
         <AppUpdateNotice hidden={zenMode} />
       </div>
@@ -925,6 +954,11 @@ function App(): JSX.Element {
           <TemplatePalette />
         </Suspense>
       )}
+      {embedDrawingPaletteOpen && (
+        <Suspense fallback={null}>
+          <EmbedDrawingPalette />
+        </Suspense>
+      )}
       {settingsOpen && (
         <Suspense fallback={null}>
           <SettingsModal />
@@ -932,6 +966,8 @@ function App(): JSX.Element {
       )}
       <PromptHost />
       <ConfirmHost />
+      <ToastHost />
+      <ExcalidrawEmbedMenuHost />
       <ServerDirectoryPickerHost />
       <AppUpdateNotice hidden={zenMode || settingsOpen} />
       <Suspense fallback={null}>

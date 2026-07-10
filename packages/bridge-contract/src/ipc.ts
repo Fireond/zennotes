@@ -67,6 +67,7 @@ export const IPC = {
   VAULT_DELETE_FOLDER: 'vault:delete-folder',
   VAULT_DUPLICATE_FOLDER: 'vault:duplicate-folder',
   VAULT_REVEAL_FOLDER: 'vault:reveal-folder',
+  VAULT_REVEAL_FILE_PATH: 'vault:reveal-file-path',
   VAULT_REVEAL_FOLDER_TARGET: 'vault:reveal-folder-target',
   VAULT_REVEAL_ASSETS_DIR: 'vault:reveal-assets-dir',
   VAULT_SCAN_TASKS: 'vault:scan-tasks',
@@ -241,6 +242,18 @@ export interface AppUpdateState {
 export type NoteFolder = 'inbox' | 'quick' | 'archive' | 'trash'
 
 export type PrimaryNotesLocation = 'inbox' | 'root'
+
+/** Where a newly created Drawing/Database file is stored. (#362) */
+export type FileLocationMode = 'primary' | 'active-note' | 'folder'
+export interface FileLocationSetting {
+  /** `primary` → the primary notes location root; `active-note` → the folder of
+   *  the note you're viewing; `folder` → the `folder` subfolder of the primary
+   *  location. */
+  mode: FileLocationMode
+  /** Vault-relative subfolder used when `mode === 'folder'`, e.g. `assets/drawings`. */
+  folder?: string
+}
+export const DEFAULT_FILE_LOCATION: FileLocationSetting = { mode: 'primary' }
 export type FolderIconId =
   | 'folder'
   | 'bolt'
@@ -371,6 +384,11 @@ export interface VaultSettings {
   dailyNotes: DailyNotesSettings
   weeklyNotes: WeeklyNotesSettings
   monthlyNotes: MonthlyNotesSettings
+  /** Where new Excalidraw drawings are created; absent means the default
+   *  (`primary`). Read through `normalizeVaultSettings`, which fills it in. (#362) */
+  drawingsLocation?: FileLocationSetting
+  /** Where new databases are created; absent means the default (`primary`). (#362) */
+  databasesLocation?: FileLocationSetting
   /** Per-vault view overrides (#292); absent/empty means "inherit global". */
   view?: VaultViewSettings
   folderIcons: Record<string, FolderIconId>
@@ -418,6 +436,8 @@ export const DEFAULT_VAULT_SETTINGS: VaultSettings = {
     titlePattern: DEFAULT_MONTHLY_NOTE_TITLE_PATTERN,
     locale: DEFAULT_MONTHLY_NOTE_LOCALE
   },
+  drawingsLocation: { mode: 'primary' },
+  databasesLocation: { mode: 'primary' },
   folderIcons: {},
   folderColors: {},
   favorites: []

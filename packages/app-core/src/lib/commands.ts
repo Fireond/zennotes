@@ -108,7 +108,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       title: 'New Database',
       category: 'Note',
       keywords: 'database table csv records spreadsheet board kanban base',
-      run: () => getState().createDatabase('inbox', '')
+      run: () => void getState().newDatabase()
     },
     {
       id: 'note.daily.today',
@@ -163,6 +163,29 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       shortcut: leaderShortcut('vim.leaderInsertTemplate'),
       when: () => !!getState().activeNote,
       run: () => getState().openTemplatePaletteForInsert()
+    },
+    {
+      id: 'drawing.new',
+      title: 'New Drawing',
+      category: 'Note',
+      keywords: 'excalidraw drawing diagram sketch create new canvas',
+      run: () => void getState().newDrawing()
+    },
+    {
+      id: 'embed.drawing.existing',
+      title: 'Embed Existing Drawing…',
+      category: 'Note',
+      keywords: 'excalidraw drawing diagram sketch insert embed image picture canvas',
+      when: () => !!getState().activeNote,
+      run: () => getState().setEmbedDrawingPaletteOpen(true)
+    },
+    {
+      id: 'embed.drawing.new',
+      title: 'Embed New Drawing',
+      category: 'Note',
+      keywords: 'excalidraw drawing diagram sketch create new insert embed canvas',
+      when: () => !!getState().activeNote,
+      run: () => void getState().embedNewDrawing()
     },
     {
       id: 'template.removeBuiltins',

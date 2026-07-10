@@ -431,6 +431,8 @@ export function Sidebar(): JSX.Element {
   const setSearchOpen = useStore((s) => s.setSearchOpen);
   const createAndOpen = useStore((s) => s.createAndOpen);
   const createDrawingAndOpen = useStore((s) => s.createDrawingAndOpen);
+  const newDrawing = useStore((s) => s.newDrawing);
+  const newDatabase = useStore((s) => s.newDatabase);
   const toggleFavorite = useStore((s) => s.toggleFavorite);
   const createDatabase = useStore((s) => s.createDatabase);
   const createNoteInChosenFolder = useStore((s) => s.createNoteInChosenFolder);
@@ -2011,7 +2013,7 @@ export function Sidebar(): JSX.Element {
       {
         label: "New drawing",
         onSelect: async () => {
-          await createDrawingAndOpen("inbox", "");
+          await newDrawing();
         },
       },
       {
@@ -2023,7 +2025,7 @@ export function Sidebar(): JSX.Element {
       {
         label: "New database",
         onSelect: async () => {
-          await createDatabase("inbox", "");
+          await newDatabase();
         },
       },
       {

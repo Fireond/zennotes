@@ -753,6 +753,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const tabNavOverrides = useStore((s) => s.keymapOverrides)
   const workspaceMode = useStore((s) => s.workspaceMode)
   const wordWrap = useStore((s) => s.wordWrap)
+  const cursorBlink = useStore((s) => s.cursorBlink)
   const systemFolderLabels = useStore((s) => s.systemFolderLabels)
   const folderLabels = resolveSystemFolderLabels(systemFolderLabels)
   const vaultSettings = useStore((s) => s.vaultSettings)
@@ -826,6 +827,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const lineNumbersCompartmentRef = useRef<Compartment | null>(null)
   const wordWrapCompartmentRef = useRef<Compartment | null>(null)
   const scrolloffCompartmentRef = useRef<Compartment | null>(null)
+  const drawSelectionCompartmentRef = useRef<Compartment | null>(null)
   // history() lives in a compartment so we can reset undo history on a note
   // switch — otherwise Cmd+Z crosses notes and overwrites the current one (#247).
   const historyCompartmentRef = useRef<Compartment | null>(null)
@@ -1465,6 +1467,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       const lineNumbersCompartment = new Compartment()
       const wordWrapCompartment = new Compartment()
       const scrolloffCompartment = new Compartment()
+      const drawSelectionCompartment = new Compartment()
       const historyCompartment = new Compartment()
       vimCompartmentRef.current = vimCompartment
       editorKeymapCompartmentRef.current = editorKeymapCompartment
@@ -1474,6 +1477,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       lineNumbersCompartmentRef.current = lineNumbersCompartment
       wordWrapCompartmentRef.current = wordWrapCompartment
       scrolloffCompartmentRef.current = scrolloffCompartment
+      drawSelectionCompartmentRef.current = drawSelectionCompartment
       historyCompartmentRef.current = historyCompartment
       const s0 = useStore.getState()
       const initialPath = findLeaf(s0.paneLayout, paneId)?.activeTab ?? null
@@ -1489,7 +1493,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           appMarkdownSnippetExtension(),
           vimCompartment.of(s0.vimMode ? vim() : []),
           historyCompartment.of(history()),
-          drawSelection(),
+          drawSelectionCompartment.of(
+            drawSelection({ cursorBlinkRate: s0.cursorBlink ? 1200 : 0 })
+          ),
           highlightActiveLine(),
           taskJumpHighlightField,
           yankHighlightExtension,
@@ -1902,6 +1908,18 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     if (!view || !comp) return
     view.dispatch({ effects: comp.reconfigure(scrollOff(editorScrollOff)) })
   }, [editorScrollOff])
+  useEffect(() => {
+    const view = viewRef.current
+    const comp = drawSelectionCompartmentRef.current
+    if (!view || !comp) return
+    // 0 disables blinking for both the drawn caret and the Vim block cursor
+    // (both read cursorBlinkRate from the drawSelection config). (#160)
+    view.dispatch({
+      effects: comp.reconfigure(
+        drawSelection({ cursorBlinkRate: cursorBlink ? 1200 : 0 })
+      )
+    })
+  }, [cursorBlink])
 
   // Re-measure CM on prefs that change line geometry.
   useEffect(() => {

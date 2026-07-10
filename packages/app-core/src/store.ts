@@ -24,7 +24,7 @@ import type {
   WorkspaceMode
 } from '@shared/ipc'
 import type { VaultTask } from '@shared/tasks'
-import { isExcalidrawPath } from '@shared/excalidraw'
+import { isExcalidrawPath, isObsidianExcalidrawPath } from '@shared/excalidraw'
 import { TASKS_TAB_PATH, isTasksTabPath, parseTasksFromBody } from '@shared/tasks'
 import type { DatabaseDoc, DatabaseSidecar } from '@shared/databases'
 import {
@@ -44,6 +44,7 @@ import { TRASH_TAB_PATH, isTrashTabPath } from '@shared/trash'
 import { ASSETS_VIEW_TAB_PATH, isAssetsViewTabPath } from '@shared/assets-view'
 import { QUICK_NOTES_TAB_PATH, isQuickNotesTabPath } from '@shared/quick-notes'
 import { isAssetTabPath, assetPathFromTab, assetTabPath } from './lib/asset-tabs'
+import { invalidateExcalidrawPreview } from './lib/excalidraw-preview'
 import {
   FENCE_RE,
   TASK_LINE_RE,
@@ -111,6 +112,7 @@ import {
   removeFolderIcons,
   normalizeVaultSettings,
   noteFolderSubpath,
+  resolveCreateLocation,
   rewriteFavoriteNotePath,
   rewriteFavoritesForFolderRename,
   toggleFavorite as toggleFavoriteKey,
@@ -446,6 +448,9 @@ interface Prefs {
   /** When true, long lines wrap inside the editor. When false they
    *  scroll horizontally — same as a coding editor's "Word Wrap". */
   wordWrap: boolean
+  /** When false the editor caret (and the Vim block cursor) stay solid
+   *  instead of blinking. */
+  cursorBlink: boolean
   /** Ctrl+D / Ctrl+U half-page scroll in preview mode. When true the
    *  jumps animate; when false they snap instantly. Vim users often
    *  prefer the instant flavor because it keeps the position
@@ -708,6 +713,7 @@ export const DEFAULT_PREFS: Prefs = {
   quickNoteDateTitle: false,
   quickNoteTitlePrefix: 'Quick Note',
   wordWrap: true,
+  cursorBlink: true,
   previewSmoothScroll: true,
   editorMaxWidth: 920,
   pdfEmbedInEditMode: 'compact',
@@ -904,6 +910,10 @@ function normalizePrefs(p: Partial<Prefs>): Prefs {
         : DEFAULT_PREFS.quickNoteTitlePrefix,
     wordWrap:
       typeof p.wordWrap === 'boolean' ? p.wordWrap : DEFAULT_PREFS.wordWrap,
+    cursorBlink:
+      typeof p.cursorBlink === 'boolean'
+        ? p.cursorBlink
+        : DEFAULT_PREFS.cursorBlink,
     previewSmoothScroll:
       typeof p.previewSmoothScroll === 'boolean'
         ? p.previewSmoothScroll
@@ -1577,6 +1587,7 @@ function collectPrefs(s: {
   quickNoteDateTitle: boolean
   quickNoteTitlePrefix: string | null
   wordWrap: boolean
+  cursorBlink: boolean
   previewSmoothScroll: boolean
   editorMaxWidth: number
   pdfEmbedInEditMode: 'compact' | 'full'
@@ -1645,6 +1656,7 @@ function collectPrefs(s: {
     quickNoteDateTitle: s.quickNoteDateTitle,
     quickNoteTitlePrefix: s.quickNoteTitlePrefix,
     wordWrap: s.wordWrap,
+    cursorBlink: s.cursorBlink,
     previewSmoothScroll: s.previewSmoothScroll,
     editorMaxWidth: s.editorMaxWidth,
     pdfEmbedInEditMode: s.pdfEmbedInEditMode,
@@ -1916,6 +1928,19 @@ function hasTasksViewOpen(state: { paneLayout: PaneLayout }): boolean {
   return allLeaves(state.paneLayout).some((leaf) => leaf.tabs.includes(TASKS_TAB_PATH))
 }
 
+/** True when a surface backed by `vaultTasks` is on screen and therefore needs
+ *  the shared task cache kept fresh on note edits. Covers the Tasks view and the
+ *  calendar panel — the latter is per-pane local state exposed via a DOM marker
+ *  (the same one VimNav reads for pane navigation), so editing a daily note with
+ *  only the calendar open still refreshes its tasks. */
+function tasksSurfaceVisible(state: { paneLayout: PaneLayout }): boolean {
+  if (hasTasksViewOpen(state)) return true
+  return (
+    typeof document !== 'undefined' &&
+    document.querySelector('[data-calendar-panel]') !== null
+  )
+}
+
 /** True when the active pane's active tab is the vault-wide Tags view. */
 export function isTagsViewActive(state: {
   paneLayout: PaneLayout
@@ -2003,6 +2028,11 @@ interface Store {
   bufferPaletteOpen: boolean
   outlinePaletteOpen: boolean
   templatePaletteOpen: boolean
+  /** "Embed existing drawing" picker visibility. */
+  embedDrawingPaletteOpen: boolean
+  /** Bumped whenever an Excalidraw drawing changes on disk so embed widgets
+   *  and preview components invalidate their cached PNG and re-render. */
+  excalidrawPreviewVersion: number
   /** 'create' makes a new note from the picked template; 'insert' renders it
    *  into the active note instead. */
   templatePaletteMode: 'create' | 'insert'
@@ -2089,6 +2119,10 @@ interface Store {
 
   /** Whether long lines wrap or scroll horizontally in the editor. */
   wordWrap: boolean
+
+  /** When false the editor caret and the Vim block cursor stay solid
+   *  instead of blinking. */
+  cursorBlink: boolean
 
   /** Animate Ctrl+D / Ctrl+U half-page jumps in preview mode. Off
    *  gives an instant snap, which Vim muscle memory prefers. */
@@ -2249,6 +2283,8 @@ interface Store {
   openDatabase: (csvPath: string) => Promise<void>
   /** Create a new empty database under `folder`/`subpath` and open it. */
   createDatabase: (folder: NoteFolder, subpath?: string, title?: string) => Promise<void>
+  /** Create a database in the configured default databases location and open it. (#362) */
+  newDatabase: () => Promise<void>
   /** Rename a database (its `.base` folder); rehomes the open grid tab. */
   renameDatabase: (csvPath: string, newTitle: string) => Promise<void>
   /** Optimistically replace a database's rows and debounce-persist the CSV. */
@@ -2458,6 +2494,14 @@ interface Store {
   openThisWeekWeeklyNote: () => Promise<void>
   openThisMonthMonthlyNote: () => Promise<void>
   setTemplatePaletteOpen: (open: boolean) => void
+  setEmbedDrawingPaletteOpen: (open: boolean) => void
+  /** Create a new Excalidraw drawing and open it in a dedicated tab. */
+  newDrawing: () => Promise<void>
+  /** Create a new Excalidraw drawing, embed it at the cursor in the active
+   *  note, then switch focus to the new drawing's editor tab. */
+  embedNewDrawing: () => Promise<void>
+  /** Insert a `![[path]]` embed at the cursor in the active note. */
+  insertEmbedAtCursor: (embed: string) => void
   /** Open the template picker scoped to a folder; the chosen template is
    *  created there directly (no destination prompt). */
   openTemplatePaletteForFolder: (folder: NoteFolder, subpath: string) => void
@@ -2485,6 +2529,7 @@ interface Store {
   saveActiveNoteAsTemplate: () => Promise<void>
   saveActiveNoteAs: (newName: string) => Promise<void>
   setWordWrap: (on: boolean) => void
+  setCursorBlink: (on: boolean) => void
   setPreviewSmoothScroll: (on: boolean) => void
   setEditorMaxWidth: (px: number) => void
   setPdfEmbedInEditMode: (mode: 'compact' | 'full') => void
@@ -3499,6 +3544,8 @@ export const useStore = create<Store>((set, get) => {
   bufferPaletteOpen: false,
   outlinePaletteOpen: false,
   templatePaletteOpen: false,
+  embedDrawingPaletteOpen: false,
+  excalidrawPreviewVersion: 0,
   templatePaletteMode: 'create',
   templatePaletteTarget: null,
   customTemplates: [],
@@ -3561,6 +3608,7 @@ export const useStore = create<Store>((set, get) => {
   quickNoteDateTitle: loadPrefs().quickNoteDateTitle,
   quickNoteTitlePrefix: loadPrefs().quickNoteTitlePrefix,
   wordWrap: loadPrefs().wordWrap,
+  cursorBlink: loadPrefs().cursorBlink,
   previewSmoothScroll: loadPrefs().previewSmoothScroll,
   editorMaxWidth: loadPrefs().editorMaxWidth,
   pdfEmbedInEditMode: loadPrefs().pdfEmbedInEditMode,
@@ -3833,6 +3881,16 @@ export const useStore = create<Store>((set, get) => {
     } catch (err) {
       console.error('createDatabase failed', err)
     }
+  },
+  newDatabase: async () => {
+    const s = get()
+    const settings = normalizeVaultSettings(s.vaultSettings)
+    const { folder, subpath } = resolveCreateLocation(
+      settings.databasesLocation,
+      s.activeNote,
+      settings
+    )
+    await get().createDatabase(folder, subpath)
   },
   renameDatabase: async (csvPath, newTitle) => {
     if (typeof window.zen.renameDatabase !== 'function') return
@@ -4678,6 +4736,12 @@ export const useStore = create<Store>((set, get) => {
       await get().refreshAssets()
       return
     }
+    // An Excalidraw drawing changed on disk — drop its cached PNG preview
+    // and bump the version so editor widgets and preview embeds re-render.
+    if (isExcalidrawPath(ev.path) || isObsidianExcalidrawPath(ev.path)) {
+      invalidateExcalidrawPreview(ev.path)
+      set({ excalidrawPreviewVersion: get().excalidrawPreviewVersion + 1 })
+    }
     await Promise.all([
       refreshNotesCoalesced(),
       ev.scope === 'vault-settings'
@@ -4710,11 +4774,13 @@ export const useStore = create<Store>((set, get) => {
       }
     }
 
-    // Keep an open Tasks tab in sync as files change externally or via our own
-    // writes — cheap per-path rescans instead of walking the whole vault. This
-    // also covers inactive Tasks tabs so returning to Kanban doesn't show stale
-    // cards from the last time the tab was focused.
-    if (hasTasksViewOpen(state)) {
+    // Keep the shared task cache in sync as files change externally or via our
+    // own writes — cheap per-path rescans instead of walking the whole vault.
+    // This covers the Tasks view (incl. inactive tabs, so returning to Kanban
+    // doesn't show stale cards) and the calendar panel, whose weekly task list
+    // otherwise kept showing a daily note's tasks as they were at the last full
+    // scan (stale checked-state, missing newly added tasks).
+    if (tasksSurfaceVisible(state)) {
       if (ev.kind === 'unlink') {
         set((s) => ({
           vaultTasks: s.vaultTasks.filter((t) => t.sourcePath !== ev.path)
@@ -4997,6 +5063,56 @@ export const useStore = create<Store>((set, get) => {
     }
   },
 
+  insertEmbedAtCursor: (embed) => {
+    const state = get()
+    const view = state.editorViewRef
+    if (!view) return
+    const { from, to } = view.state.selection.main
+    view.dispatch({
+      changes: { from, to, insert: embed },
+      selection: { anchor: from + embed.length },
+      scrollIntoView: true
+    })
+    view.focus()
+  },
+
+  newDrawing: async () => {
+    try {
+      const s = get()
+      const settings = normalizeVaultSettings(s.vaultSettings)
+      const { folder, subpath } = resolveCreateLocation(
+        settings.drawingsLocation,
+        s.activeNote,
+        settings
+      )
+      const meta = await window.zen.createExcalidraw(folder, subpath)
+      await get().refreshNotes()
+      await get().openNoteInTab(meta.path)
+    } catch (err) {
+      console.error('newDrawing failed', err)
+    }
+  },
+
+  embedNewDrawing: async () => {
+    try {
+      const s = get()
+      const settings = normalizeVaultSettings(s.vaultSettings)
+      const { folder, subpath } = resolveCreateLocation(
+        settings.drawingsLocation,
+        s.activeNote,
+        settings
+      )
+      const meta = await window.zen.createExcalidraw(folder, subpath)
+      if (get().activeNote) {
+        get().insertEmbedAtCursor(`![[${meta.path}]]\n`)
+      }
+      await get().refreshNotes()
+      await get().openNoteInTab(meta.path)
+    } catch (err) {
+      console.error('embedNewDrawing failed', err)
+    }
+  },
+
   createNoteInChosenFolder: async (opts) => {
     const state = get()
     const entered = await promptApp(
@@ -5201,12 +5317,26 @@ export const useStore = create<Store>((set, get) => {
       if (get().noteDirty[path]) {
         throw new Error('Could not save the note before exporting the PDF.')
       }
-      await window.zen.exportNotePdf(path)
+      const pdfPath = await window.zen.exportNotePdf(path)
+      // A returned path means a real file was written on disk — desktop only.
+      // Web returns null (it navigates the prepared window to a print view, which
+      // is the feedback there, so we must NOT close that window), and desktop
+      // returns null when the save dialog is cancelled. Only then confirm + offer
+      // to reveal the file. (#257)
+      if (pdfPath) {
+        const { useToastStore } = await import('./lib/toast')
+        useToastStore.getState().addToast('PDF exported', 'success', {
+          label: 'Show in folder',
+          onClick: () => void window.zen.revealFilePath(pdfPath)
+        })
+      }
     } catch (err) {
       preparedExportWindow?.close()
       console.error('exportNotePdf failed', err)
-      window.alert(
-        err instanceof Error ? err.message : 'Could not export the note as a PDF.'
+      const { useToastStore } = await import('./lib/toast')
+      useToastStore.getState().addToast(
+        err instanceof Error ? err.message : 'Could not export the note as a PDF.',
+        'error'
       )
     }
   },
@@ -5243,6 +5373,7 @@ export const useStore = create<Store>((set, get) => {
       commandPaletteInitialMode: open ? mode : 'main'
     }),
   setBufferPaletteOpen: (open) => set({ bufferPaletteOpen: open }),
+  setEmbedDrawingPaletteOpen: (open) => set({ embedDrawingPaletteOpen: open }),
   setOutlinePaletteOpen: (open) => set({ outlinePaletteOpen: open }),
   setQuery: (q) => set({ query: q }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
@@ -5743,6 +5874,11 @@ export const useStore = create<Store>((set, get) => {
         await get().createAndOpen('inbox', subpath, { title })
       }
     }
+    // Land keyboard focus in the editor so `i` starts insert straight away,
+    // instead of leaving focus on the sidebar item that just got selected. The
+    // command is a jump-and-type flow and is often fired from outside the
+    // editor (leader key, palette), where focus would otherwise stay put. (#353)
+    requestEditorFocus()
     // Opening *today's* note rolls unfinished tasks forward from past daily
     // notes (Obsidian-style) when enabled. Fire-and-forget so the note shows
     // right away; the rollover appends into the now-open buffer.
@@ -5917,14 +6053,16 @@ export const useStore = create<Store>((set, get) => {
     if (existing) {
       set({ view: { kind: 'folder', folder: 'inbox', subpath } })
       await get().selectNote(existing.path)
-      return
+    } else {
+      const template = resolveTemplate(state.customTemplates, settings.weeklyNotes.templateId)
+      if (template) {
+        await get().createFromTemplate(template, { folder: 'inbox', subpath, title, date })
+      } else {
+        await get().createAndOpen('inbox', subpath, { title })
+      }
     }
-    const template = resolveTemplate(state.customTemplates, settings.weeklyNotes.templateId)
-    if (template) {
-      await get().createFromTemplate(template, { folder: 'inbox', subpath, title, date })
-      return
-    }
-    await get().createAndOpen('inbox', subpath, { title })
+    // Focus the editor so `i` starts insert immediately (see openDailyNoteForDate).
+    requestEditorFocus()
   },
 
   openThisWeekWeeklyNote: async () => {
@@ -5940,14 +6078,16 @@ export const useStore = create<Store>((set, get) => {
     if (existing) {
       set({ view: { kind: 'folder', folder: 'inbox', subpath } })
       await get().selectNote(existing.path)
-      return
+    } else {
+      const template = resolveTemplate(state.customTemplates, settings.monthlyNotes.templateId)
+      if (template) {
+        await get().createFromTemplate(template, { folder: 'inbox', subpath, title, date })
+      } else {
+        await get().createAndOpen('inbox', subpath, { title })
+      }
     }
-    const template = resolveTemplate(state.customTemplates, settings.monthlyNotes.templateId)
-    if (template) {
-      await get().createFromTemplate(template, { folder: 'inbox', subpath, title, date })
-      return
-    }
-    await get().createAndOpen('inbox', subpath, { title })
+    // Focus the editor so `i` starts insert immediately (see openDailyNoteForDate).
+    requestEditorFocus()
   },
 
   openThisMonthMonthlyNote: async () => {
@@ -6117,6 +6257,11 @@ export const useStore = create<Store>((set, get) => {
 
   setWordWrap: (on) => {
     set({ wordWrap: on })
+    savePrefs(collectPrefs(get()))
+  },
+
+  setCursorBlink: (on) => {
+    set({ cursorBlink: on })
     savePrefs(collectPrefs(get()))
   },
 
