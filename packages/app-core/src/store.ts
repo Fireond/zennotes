@@ -112,6 +112,7 @@ import {
   removeFolderIcons,
   normalizeVaultSettings,
   noteFolderSubpath,
+  resolveCreateLocation,
   rewriteFavoriteNotePath,
   rewriteFavoritesForFolderRename,
   toggleFavorite as toggleFavoriteKey,
@@ -2268,6 +2269,8 @@ interface Store {
   openDatabase: (csvPath: string) => Promise<void>
   /** Create a new empty database under `folder`/`subpath` and open it. */
   createDatabase: (folder: NoteFolder, subpath?: string, title?: string) => Promise<void>
+  /** Create a database in the configured default databases location and open it. (#362) */
+  newDatabase: () => Promise<void>
   /** Rename a database (its `.base` folder); rehomes the open grid tab. */
   renameDatabase: (csvPath: string, newTitle: string) => Promise<void>
   /** Optimistically replace a database's rows and debounce-persist the CSV. */
@@ -3863,6 +3866,16 @@ export const useStore = create<Store>((set, get) => {
       console.error('createDatabase failed', err)
     }
   },
+  newDatabase: async () => {
+    const s = get()
+    const settings = normalizeVaultSettings(s.vaultSettings)
+    const { folder, subpath } = resolveCreateLocation(
+      settings.databasesLocation,
+      s.activeNote,
+      settings
+    )
+    await get().createDatabase(folder, subpath)
+  },
   renameDatabase: async (csvPath, newTitle) => {
     if (typeof window.zen.renameDatabase !== 'function') return
     try {
@@ -5049,7 +5062,14 @@ export const useStore = create<Store>((set, get) => {
 
   newDrawing: async () => {
     try {
-      const meta = await window.zen.createExcalidraw('inbox', '')
+      const s = get()
+      const settings = normalizeVaultSettings(s.vaultSettings)
+      const { folder, subpath } = resolveCreateLocation(
+        settings.drawingsLocation,
+        s.activeNote,
+        settings
+      )
+      const meta = await window.zen.createExcalidraw(folder, subpath)
       await get().refreshNotes()
       await get().openNoteInTab(meta.path)
     } catch (err) {
@@ -5059,7 +5079,14 @@ export const useStore = create<Store>((set, get) => {
 
   embedNewDrawing: async () => {
     try {
-      const meta = await window.zen.createExcalidraw('inbox', '')
+      const s = get()
+      const settings = normalizeVaultSettings(s.vaultSettings)
+      const { folder, subpath } = resolveCreateLocation(
+        settings.drawingsLocation,
+        s.activeNote,
+        settings
+      )
+      const meta = await window.zen.createExcalidraw(folder, subpath)
       if (get().activeNote) {
         get().insertEmbedAtCursor(`![[${meta.path}]]\n`)
       }

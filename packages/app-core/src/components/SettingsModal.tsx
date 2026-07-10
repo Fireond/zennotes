@@ -2967,6 +2967,77 @@ export function SettingsModal(): JSX.Element {
                 />
               </Section>
               <Section
+                title="New Drawings & Databases"
+                description="Where new Excalidraw drawings and databases are created, so they don't clutter the root of your vault."
+              >
+                <SegmentedRow
+                  label="Default drawings location"
+                  description="`Primary location` uses your primary notes area, `Active note's folder` puts it beside the note you're viewing, `Specific folder` uses a subfolder you choose."
+                  value={vaultSettings.drawingsLocation?.mode ?? "primary"}
+                  settingId="drawings-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      drawingsLocation: { ...vaultSettings.drawingsLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.drawingsLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Drawings folder"
+                    description="Vault-relative subfolder for new drawings, e.g. `assets/drawings`."
+                    value={vaultSettings.drawingsLocation?.folder ?? ""}
+                    placeholder="assets/drawings"
+                    settingId="drawings-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        drawingsLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+                <SegmentedRow
+                  label="Default databases location"
+                  description="Same options as drawings, applied to new databases."
+                  value={vaultSettings.databasesLocation?.mode ?? "primary"}
+                  settingId="databases-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      databasesLocation: { ...vaultSettings.databasesLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.databasesLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Databases folder"
+                    description="Vault-relative subfolder for new databases, e.g. `assets/databases`."
+                    value={vaultSettings.databasesLocation?.folder ?? ""}
+                    placeholder="assets/databases"
+                    settingId="databases-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        databasesLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+              </Section>
+              <Section
                 title="View settings"
                 description="Whether note-list & view preferences are shared across all vaults or kept per vault."
               >

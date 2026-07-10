@@ -28,6 +28,7 @@ import {
   type PrimaryNotesLocation,
   type VaultSettings,
   type VaultViewSettings,
+  type FileLocationSetting,
   FolderEntry,
   ImportedAsset,
   ImportedAssetKind,
@@ -781,7 +782,13 @@ function cloneVaultSettings(settings: VaultSettings): VaultSettings {
     folderIcons: { ...settings.folderIcons },
     folderColors: { ...settings.folderColors },
     favorites: [...settings.favorites],
-    ...(settings.view ? { view: cloneVaultViewSettings(settings.view) } : {})
+    ...(settings.view ? { view: cloneVaultViewSettings(settings.view) } : {}),
+    ...(settings.drawingsLocation
+      ? { drawingsLocation: { ...settings.drawingsLocation } }
+      : {}),
+    ...(settings.databasesLocation
+      ? { databasesLocation: { ...settings.databasesLocation } }
+      : {})
   }
 }
 
@@ -921,6 +928,22 @@ function normalizePrimaryNotesLocation(value: unknown): PrimaryNotesLocation {
   return value === 'root' ? 'root' : 'inbox'
 }
 
+/** Persist a drawings/databases file-location setting; mirrors the renderer's
+ *  normalizer so the round-trip through vault.json keeps the value. (#362) */
+function normalizeFileLocation(value: unknown): FileLocationSetting {
+  const v = value as { mode?: unknown; folder?: unknown } | null | undefined
+  if (v?.mode === 'active-note') return { mode: 'active-note' }
+  if (v?.mode === 'folder') {
+    // Keep `folder` mode even when empty so the setting sticks while the user is
+    // still typing the folder; an empty folder resolves to the primary root.
+    const folder = (typeof v.folder === 'string' ? v.folder : '')
+      .trim()
+      .replace(/^\/+|\/+$/g, '')
+    return { mode: 'folder', folder }
+  }
+  return { mode: 'primary' }
+}
+
 function normalizeVaultSettings(
   value: unknown,
   fallbackPrimary: PrimaryNotesLocation = DEFAULT_VAULT_SETTINGS.primaryNotesLocation
@@ -948,6 +971,8 @@ function normalizeVaultSettings(
         titlePattern: DEFAULT_MONTHLY_NOTE_TITLE_PATTERN,
         locale: DEFAULT_MONTHLY_NOTE_LOCALE
       },
+      drawingsLocation: { mode: 'primary' },
+      databasesLocation: { mode: 'primary' },
       folderIcons: {},
       folderColors: {},
       favorites: []
@@ -981,6 +1006,8 @@ function normalizeVaultSettings(
       legacyPatterns?: unknown
       templateId?: unknown
     } | null
+    drawingsLocation?: unknown
+    databasesLocation?: unknown
     folderIcons?: Record<string, unknown> | null
     folderColors?: Record<string, unknown> | null
     favorites?: unknown
@@ -1032,6 +1059,8 @@ function normalizeVaultSettings(
       legacyPatterns: normalizeMonthlyNoteLegacyPatterns(candidate.monthlyNotes?.legacyPatterns),
       templateId: normalizeTemplateId(candidate.monthlyNotes?.templateId)
     },
+    drawingsLocation: normalizeFileLocation(candidate.drawingsLocation),
+    databasesLocation: normalizeFileLocation(candidate.databasesLocation),
     folderIcons,
     folderColors: normalizeFolderColors(candidate.folderColors),
     favorites: normalizeFavorites(candidate.favorites),

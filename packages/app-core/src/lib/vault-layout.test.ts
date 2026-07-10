@@ -12,6 +12,7 @@ import {
   isFavoriteFolderKey,
   noteFolderSubpath,
   normalizeVaultSettings,
+  resolveCreateLocation,
   parseFavoriteFolderKey,
   removeFavoritesForFolder,
   rewriteFavoriteNotePath,
@@ -632,5 +633,71 @@ describe('favorites', () => {
   it('defaults favorites to an empty array', () => {
     const settings = normalizeVaultSettings({} as unknown as VaultSettings)
     expect(settings.favorites).toEqual([])
+  })
+})
+
+describe('resolveCreateLocation (#362)', () => {
+  const settings = normalizeVaultSettings(null)
+
+  it('defaults to the primary location root', () => {
+    expect(resolveCreateLocation({ mode: 'primary' }, null, settings)).toEqual({
+      folder: 'inbox',
+      subpath: ''
+    })
+    expect(resolveCreateLocation(undefined, null, settings)).toEqual({
+      folder: 'inbox',
+      subpath: ''
+    })
+  })
+
+  it('uses a specific subfolder in folder mode', () => {
+    expect(
+      resolveCreateLocation({ mode: 'folder', folder: 'assets/drawings' }, null, settings)
+    ).toEqual({ folder: 'inbox', subpath: 'assets/drawings' })
+  })
+
+  it('falls back to primary when folder mode has no folder', () => {
+    expect(resolveCreateLocation({ mode: 'folder', folder: '' }, null, settings)).toEqual({
+      folder: 'inbox',
+      subpath: ''
+    })
+  })
+
+  it('uses the active note folder in active-note mode', () => {
+    const active = {
+      folder: 'inbox',
+      path: 'inbox/Projects/Plan.md'
+    } as Pick<NoteMeta, 'folder' | 'path'>
+    expect(resolveCreateLocation({ mode: 'active-note' }, active, settings)).toEqual({
+      folder: 'inbox',
+      subpath: 'Projects'
+    })
+  })
+
+  it('falls back to primary for active-note with nothing open or a trashed note', () => {
+    expect(resolveCreateLocation({ mode: 'active-note' }, null, settings)).toEqual({
+      folder: 'inbox',
+      subpath: ''
+    })
+    const trashed = { folder: 'trash', path: 'trash/Old.md' } as Pick<
+      NoteMeta,
+      'folder' | 'path'
+    >
+    expect(resolveCreateLocation({ mode: 'active-note' }, trashed, settings)).toEqual({
+      folder: 'inbox',
+      subpath: ''
+    })
+  })
+})
+
+describe('normalizeVaultSettings drawings/databases location (#362)', () => {
+  it('fills defaults and normalizes a folder value', () => {
+    const n = normalizeVaultSettings(null)
+    expect(n.drawingsLocation).toEqual({ mode: 'primary' })
+    expect(n.databasesLocation).toEqual({ mode: 'primary' })
+    const custom = normalizeVaultSettings({
+      drawingsLocation: { mode: 'folder', folder: '/assets/drawings/' }
+    } as unknown as VaultSettings)
+    expect(custom.drawingsLocation).toEqual({ mode: 'folder', folder: 'assets/drawings' })
   })
 })

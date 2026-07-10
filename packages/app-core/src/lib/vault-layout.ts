@@ -11,6 +11,7 @@ import {
   DEFAULT_VAULT_SETTINGS,
   type AssetMeta,
   type DateNotePatternSettings,
+  type FileLocationSetting,
   type FolderIconId,
   type FolderColorId,
   type NoteFolder,
@@ -500,6 +501,47 @@ function mergePatternMatch(
   return true
 }
 
+/** Normalize a stored drawings/databases file-location setting. (#362) */
+function normalizeFileLocation(
+  value: FileLocationSetting | null | undefined
+): FileLocationSetting {
+  if (value?.mode === 'active-note') return { mode: 'active-note' }
+  if (value?.mode === 'folder') {
+    // Keep `folder` mode even when empty so the Settings UI can show the folder
+    // input; an empty folder just resolves to the primary root (see
+    // resolveCreateLocation) until one is typed.
+    const folder = (value.folder ?? '').trim().replace(/^\/+|\/+$/g, '')
+    return { mode: 'folder', folder }
+  }
+  return { mode: 'primary' }
+}
+
+/**
+ * Resolve where a new Drawing/Database should be created, from a
+ * `FileLocationSetting` + the note you're currently viewing. Returns the
+ * `(folder, subpath)` pair the `createExcalidraw` / `createDatabase` bridge calls
+ * expect. (#362)
+ *
+ *  - `primary`     → the primary notes location root (default; the pre-#362 behavior)
+ *  - `active-note` → the folder of the active note (falls back to primary when
+ *                    nothing is open or the note is in Trash)
+ *  - `folder`      → the given subfolder of the primary location
+ */
+export function resolveCreateLocation(
+  setting: FileLocationSetting | null | undefined,
+  activeNote: Pick<NoteMeta, 'folder' | 'path'> | null | undefined,
+  settings: VaultSettings | null | undefined
+): { folder: NoteFolder; subpath: string } {
+  const normalized = normalizeFileLocation(setting)
+  if (normalized.mode === 'active-note' && activeNote && activeNote.folder !== 'trash') {
+    return { folder: activeNote.folder, subpath: noteFolderSubpath(activeNote, settings) }
+  }
+  if (normalized.mode === 'folder' && normalized.folder) {
+    return { folder: 'inbox', subpath: normalized.folder }
+  }
+  return { folder: 'inbox', subpath: '' }
+}
+
 export function normalizeVaultSettings(
   settings: VaultSettings | null | undefined
 ): VaultSettings {
@@ -584,6 +626,8 @@ export function normalizeVaultSettings(
       ),
       templateId: normalizeTemplateId(settings?.monthlyNotes?.templateId)
     },
+    drawingsLocation: normalizeFileLocation(settings?.drawingsLocation),
+    databasesLocation: normalizeFileLocation(settings?.databasesLocation),
     folderIcons: normalizedFolderIcons,
     folderColors: normalizedFolderColors,
     favorites: normalizedFavorites,

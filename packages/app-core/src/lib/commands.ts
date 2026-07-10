@@ -108,7 +108,7 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       title: 'New Database',
       category: 'Note',
       keywords: 'database table csv records spreadsheet board kanban base',
-      run: () => getState().createDatabase('inbox', '')
+      run: () => void getState().newDatabase()
     },
     {
       id: 'note.daily.today',
