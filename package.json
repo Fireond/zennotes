@@ -36,5 +36,9 @@
   },
   "devDependencies": {
     "turbo": "^2.5.8"
+  },
+  "allowScripts": {
+    "electron@41.2.1": true,
+    "esbuild@0.21.5": true
   }
 }

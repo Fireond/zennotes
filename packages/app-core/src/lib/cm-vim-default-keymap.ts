@@ -3,6 +3,7 @@ import { markdownKeymap } from '@codemirror/lang-markdown'
 import { Prec, type Extension } from '@codemirror/state'
 import { keymap, type EditorView, type KeyBinding } from '@codemirror/view'
 import { getCM } from '@replit/codemirror-vim'
+import { isMacPlatform } from './keymaps'
 
 /**
  * macOS-only Vim keymap conflict (`Ctrl-d` deletes instead of half-page-down).
@@ -64,6 +65,17 @@ const ARROW_KEYS = new Set(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'])
 const VIM_MOTION_KEYS = new Set([...ARROW_KEYS, 'Enter', 'Backspace'])
 
 /**
+ * Portable CodeMirror bindings whose `Mod` modifier becomes Ctrl on
+ * Linux/Windows and collides with Vim normal/visual-mode motions.
+ *
+ * These live outside `defaultKeymap`: `historyKeymap` binds Mod-u to selection
+ * undo, while `searchKeymap` binds Mod-d to select-next-occurrence. On a
+ * non-Mac platform those higher-precedence bindings otherwise swallow Vim's
+ * `<C-u>` / `<C-d>` half-page motions before codemirror-vim sees them.
+ */
+const NON_MAC_VIM_AUXILIARY_KEYS = new Set(['Mod-u', 'Mod-d'])
+
+/**
  * Vim key conflicts (arrows / Enter / Backspace act as edits, not motions).
  *
  * `defaultKeymap` binds the arrows to caret motions (`cursorCharLeft`/…) with
@@ -121,6 +133,21 @@ const vimModeKeymap: readonly KeyBinding[] = deferKeysToVim(
  */
 export function vimAwareDefaultKeymap(vimMode: boolean): readonly KeyBinding[] {
   return vimMode ? vimModeKeymap : defaultKeymap
+}
+
+/**
+ * Make auxiliary CodeMirror keymaps (currently history/search) yield their
+ * Ctrl+U / Ctrl+D collisions to Vim in normal and visual mode on Linux and
+ * Windows. macOS keeps the original Mod bindings because Mod is Command there,
+ * so they do not collide with Vim's Ctrl chords. Insert mode and Vim-off keep
+ * CodeMirror's native commands unchanged.
+ */
+export function vimAwareAuxiliaryKeymap(
+  bindings: readonly KeyBinding[],
+  vimMode: boolean
+): readonly KeyBinding[] {
+  if (!vimMode || isMacPlatform()) return bindings
+  return deferKeysToVim(bindings, NON_MAC_VIM_AUXILIARY_KEYS)
 }
 
 /**

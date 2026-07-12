@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, type KeyBinding } from '@codemirror/view'
-import { vim } from '@replit/codemirror-vim'
+import { historyKeymap } from '@codemirror/commands'
+import { searchKeymap } from '@codemirror/search'
+import { Vim, vim } from '@replit/codemirror-vim'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from './cm-vim-default-keymap'
+import {
+  vimAwareAuxiliaryKeymap,
+  vimAwareDefaultKeymap,
+  vimAwareMarkdownKeymap
+} from './cm-vim-default-keymap'
 
 // Regression guard for the macOS Vim `Ctrl-d` bug: defaultKeymap's emacs-style
 // mac chords used to shadow Vim's <C-d> (half-page down) and delete a char.
@@ -51,6 +57,137 @@ describe('vimAwareDefaultKeymap', () => {
     expect(vimAwareDefaultKeymap(false).find((b) => b.key === 'ArrowLeft')?.preventDefault).toBe(
       true
     )
+  })
+})
+
+describe('vimAwareAuxiliaryKeymap', () => {
+  const views: EditorView[] = []
+  let originalZenDescriptor: PropertyDescriptor | undefined
+
+  const setRuntimePlatform = (platform: NodeJS.Platform): void => {
+    Object.defineProperty(window, 'zen', {
+      configurable: true,
+      value: { platformSync: () => platform }
+    })
+  }
+
+  beforeEach(() => {
+    originalZenDescriptor = Object.getOwnPropertyDescriptor(window, 'zen')
+    setRuntimePlatform('linux')
+  })
+
+  afterEach(() => {
+    views.splice(0).forEach((view) => view.destroy())
+    if (originalZenDescriptor) {
+      Object.defineProperty(window, 'zen', originalZenDescriptor)
+    } else {
+      delete (window as unknown as { zen?: unknown }).zen
+    }
+  })
+
+  const mountVim = (): EditorView => {
+    const view = new EditorView({
+      state: EditorState.create({ doc: 'hello', extensions: [vim()] }),
+      parent: document.body
+    })
+    views.push(view)
+    view.focus()
+    return view
+  }
+
+  const press = (
+    view: EditorView,
+    key: string,
+    keyCode: number,
+    ctrlKey = false
+  ): void => {
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key,
+        code: key.length === 1 ? `Key${key.toUpperCase()}` : key,
+        keyCode,
+        ctrlKey,
+        bubbles: true,
+        cancelable: true
+      })
+    )
+  }
+
+  const bindingFor = (bindings: readonly KeyBinding[], key: string): KeyBinding => {
+    const binding = bindings.find((candidate) => candidate.key === key)
+    if (!binding) throw new Error(`missing ${key} binding`)
+    return binding
+  }
+
+  it('defers the real history/search Ctrl chords on Linux', () => {
+    const history = bindingFor(vimAwareAuxiliaryKeymap(historyKeymap, true), 'Mod-u')
+    const search = bindingFor(vimAwareAuxiliaryKeymap(searchKeymap, true), 'Mod-d')
+
+    expect(history.preventDefault).toBe(false)
+    expect(search.preventDefault).toBe(false)
+    expect(history.run?.(mountVim())).toBe(false)
+    expect(search.run?.(mountVim())).toBe(false)
+  })
+
+  it('defers in visual mode but preserves the native command in insert mode', () => {
+    const native = vi.fn(() => true)
+    const binding = bindingFor(
+      vimAwareAuxiliaryKeymap([{ key: 'Mod-u', run: native, preventDefault: true }], true),
+      'Mod-u'
+    )
+
+    const visual = mountVim()
+    press(visual, 'v', 86)
+    expect(binding.run?.(visual)).toBe(false)
+    expect(native).not.toHaveBeenCalled()
+
+    const insert = mountVim()
+    press(insert, 'i', 73)
+    expect(binding.run?.(insert)).toBe(true)
+    expect(native).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the original bindings with Vim off or on macOS', () => {
+    expect(vimAwareAuxiliaryKeymap(historyKeymap, false)).toBe(historyKeymap)
+    setRuntimePlatform('darwin')
+    expect(vimAwareAuxiliaryKeymap(historyKeymap, true)).toBe(historyKeymap)
+    expect(vimAwareAuxiliaryKeymap(searchKeymap, true)).toBe(searchKeymap)
+  })
+
+  it('routes Ctrl+U and Ctrl+D through codemirror-vim in normal mode', () => {
+    const halfUp = vi.fn()
+    const halfDown = vi.fn()
+    Vim.defineAction('zenTestHalfPageUp', halfUp)
+    Vim.defineAction('zenTestHalfPageDown', halfDown)
+    Vim.mapCommand('<C-u>', 'action', 'zenTestHalfPageUp', {}, { context: 'normal' })
+    Vim.mapCommand('<C-d>', 'action', 'zenTestHalfPageDown', {}, { context: 'normal' })
+
+    try {
+      const view = new EditorView({
+        state: EditorState.create({
+          doc: 'hello',
+          extensions: [
+            vim(),
+            keymap.of([
+              ...vimAwareAuxiliaryKeymap(historyKeymap, true),
+              ...vimAwareAuxiliaryKeymap(searchKeymap, true)
+            ])
+          ]
+        }),
+        parent: document.body
+      })
+      views.push(view)
+      view.focus()
+
+      press(view, 'u', 85, true)
+      press(view, 'd', 68, true)
+
+      expect(halfUp).toHaveBeenCalledOnce()
+      expect(halfDown).toHaveBeenCalledOnce()
+    } finally {
+      Vim.unmap('<C-u>', 'normal')
+      Vim.unmap('<C-d>', 'normal')
+    }
   })
 })
 

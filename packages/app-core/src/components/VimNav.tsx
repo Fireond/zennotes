@@ -25,7 +25,6 @@ import {
   matchesShortcutBinding,
   sequenceTokenFromEvent
 } from '../lib/keymaps'
-import { toggleWrap, wrapLink } from '../lib/cm-format'
 import {
   ZEN_OPEN_EDITOR_CONTEXT_MENU_EVENT,
   dispatchKeyboardContextMenu,
@@ -403,16 +402,10 @@ export function VimNav(): JSX.Element | null {
       const previewEl = getPreviewScrollElement()
       const hoverPreviewEl = getHoverPreviewScrollElement()
 
-      // Inline-format shortcuts (Bold/Italic/Strike/Highlight/Code/Math/Link)
-      // mirror the selection toolbar. Handled here — in the window capture
-      // handler — so they work on every platform and beat Vim's own Ctrl
-      // chords (e.g. <C-b>) in normal/visual mode on Linux/Windows. `Mod`
-      // resolves to ⌘ on macOS and Ctrl elsewhere.
-      // While an autocomplete menu is open (slash commands, @ dates, [[ links,
-      // template variables), its own Ctrl-based navigation owns these chords —
-      // e.g. Ctrl+K moves the selection up rather than "insert link". Defer the
-      // inline-format shortcuts to the completion handler so they can't hijack
-      // the open menu. (#337)
+      // Formatting shortcuts are owned by CodeMirror's mode-aware keymap: in
+      // Vim insert mode they format, while normal/visual mode keeps the Ctrl
+      // chords available to Vim and the app-level routes below. VimNav only
+      // owns the shortcut that moves focus into the visible selection toolbar.
       const fmtView = state.editorViewRef
       if (fmtView && isEditorFocused(fmtView) && completionStatus(fmtView.state) !== 'active') {
         // Focus the selection toolbar (when shown) for keyboard navigation.
@@ -424,25 +417,6 @@ export function VimNav(): JSX.Element | null {
             e.preventDefault()
             e.stopImmediatePropagation()
             firstItem.focus()
-            return
-          }
-        }
-        // Bindings in canonical modifier order (Shift before Mod), matching
-        // `normalizeShortcutBinding` so `matchesShortcutBinding` compares equal.
-        const formats: Array<[string, () => void]> = [
-          ['Mod+B', () => toggleWrap(fmtView, '**')],
-          ['Mod+I', () => toggleWrap(fmtView, '*')],
-          ['Mod+E', () => toggleWrap(fmtView, '`')],
-          ['Shift+Mod+S', () => toggleWrap(fmtView, '~~')],
-          ['Shift+Mod+H', () => toggleWrap(fmtView, '==')],
-          ['Shift+Mod+M', () => toggleWrap(fmtView, '$')],
-          ['Mod+K', () => wrapLink(fmtView)]
-        ]
-        for (const [binding, run] of formats) {
-          if (matchesShortcutBinding(e, binding)) {
-            e.preventDefault()
-            e.stopImmediatePropagation()
-            run()
             return
           }
         }

@@ -41,9 +41,13 @@ import {
 } from '@codemirror/view'
 import { Vim, vim } from '@replit/codemirror-vim'
 import { history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-default-keymap'
+import {
+  vimAwareAuxiliaryKeymap,
+  vimAwareDefaultKeymap,
+  vimAwareMarkdownKeymap
+} from '../lib/cm-vim-default-keymap'
 import { registerDisplayLineMotion } from '../lib/cm-vim-display-line'
-import { toggleWrap, wrapLink } from '../lib/cm-format'
+import { inlineFormatKeymap } from '../lib/cm-inline-format-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
@@ -431,21 +435,9 @@ export function QuickCaptureApp(): JSX.Element {
           appMarkdownSnippetExtension(),
           new Compartment().of(prefs.vimMode ? vim() : []),
           // #312: inline-format shortcuts (bold/italic/code/strike/highlight/
-          // math/link) — the same markers the main editor's VimNav binds — so
-          // the Quick Note window formats identically instead of falling through
-          // to a default (⌘I selecting the line). Highest precedence so they beat
-          // vim's Ctrl chords (Mod = Ctrl on Linux/Windows) and editor defaults.
-          Prec.highest(
-            keymap.of([
-              { key: 'Mod-b', run: (v) => toggleWrap(v, '**') },
-              { key: 'Mod-i', run: (v) => toggleWrap(v, '*') },
-              { key: 'Mod-e', run: (v) => toggleWrap(v, '`') },
-              { key: 'Shift-Mod-s', run: (v) => toggleWrap(v, '~~') },
-              { key: 'Shift-Mod-h', run: (v) => toggleWrap(v, '==') },
-              { key: 'Shift-Mod-m', run: (v) => toggleWrap(v, '$') },
-              { key: 'Mod-k', run: (v) => wrapLink(v) }
-            ])
-          ),
+          // math/link). The shared keymap preserves these in non-Vim and Vim
+          // insert mode while yielding Ctrl chords to Vim normal/visual mode.
+          inlineFormatKeymap,
           history(),
           drawSelection(),
           highlightActiveLine(),
@@ -484,8 +476,8 @@ export function QuickCaptureApp(): JSX.Element {
             indentWithTab,
             ...completionKeymap,
             ...vimAwareDefaultKeymap(prefs.vimMode),
-            ...historyKeymap,
-            ...searchKeymap
+            ...vimAwareAuxiliaryKeymap(historyKeymap, prefs.vimMode),
+            ...vimAwareAuxiliaryKeymap(searchKeymap, prefs.vimMode)
           ]),
           EditorView.updateListener.of((upd) => {
             if (!upd.docChanged) return

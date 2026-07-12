@@ -15,7 +15,11 @@ import { Annotation, Compartment, EditorState, type Transaction } from '@codemir
 import { EditorView, drawSelection, highlightActiveLine, keymap } from '@codemirror/view'
 import { Vim, vim } from '@replit/codemirror-vim'
 import { history, historyKeymap, indentWithTab } from '@codemirror/commands'
-import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-default-keymap'
+import {
+  vimAwareAuxiliaryKeymap,
+  vimAwareDefaultKeymap,
+  vimAwareMarkdownKeymap
+} from '../lib/cm-vim-default-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
 import { applyVimInsertEscape } from '../lib/vim-insert-escape'
@@ -127,8 +131,8 @@ export function ExternalFileApp(): JSX.Element {
           keymap.of([
             indentWithTab,
             ...vimAwareDefaultKeymap(prefs.vimMode),
-            ...historyKeymap,
-            ...searchKeymap
+            ...vimAwareAuxiliaryKeymap(historyKeymap, prefs.vimMode),
+            ...vimAwareAuxiliaryKeymap(searchKeymap, prefs.vimMode)
           ]),
           EditorView.updateListener.of((upd) => {
             if (!upd.docChanged) return

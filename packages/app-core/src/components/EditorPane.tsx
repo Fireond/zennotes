@@ -54,7 +54,12 @@ import { resolveCodeLanguage } from '../lib/cm-code-languages'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { forwardOnCheckboxArrow } from '../lib/cm-forward-task'
 import { completionNavKeymap } from '../lib/cm-completion-nav'
-import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-default-keymap'
+import {
+  vimAwareAuxiliaryKeymap,
+  vimAwareDefaultKeymap,
+  vimAwareMarkdownKeymap
+} from '../lib/cm-vim-default-keymap'
+import { inlineFormatKeymap } from '../lib/cm-inline-format-keymap'
 import { scrollOff } from '../lib/cm-scrolloff'
 import { offerCreateNoteFromLink } from '../lib/create-note-from-link'
 import {
@@ -287,8 +292,8 @@ function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extens
     { key: toCmKey(getKeymapBinding(overrides, 'editor.moveLineDown')), run: moveLineDown },
     indentWithTab,
     ...vimAwareDefaultKeymap(vimMode),
-    ...historyKeymap,
-    ...searchKeymap,
+    ...vimAwareAuxiliaryKeymap(historyKeymap, vimMode),
+    ...vimAwareAuxiliaryKeymap(searchKeymap, vimMode),
     ...completionKeymap
   ])
 }
@@ -1492,6 +1497,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
         extensions: [
           appMarkdownSnippetExtension(),
           vimCompartment.of(s0.vimMode ? vim() : []),
+          inlineFormatKeymap,
           historyCompartment.of(history()),
           drawSelectionCompartment.of(
             drawSelection({ cursorBlinkRate: s0.cursorBlink ? 1200 : 0 })
