@@ -161,6 +161,27 @@ describe('SettingsModal date note directories', () => {
     expect(mocks.setVaultSettings).not.toHaveBeenCalled()
   })
 
+  it('keeps the full-screen backdrop filter-free and renders a selected category', async () => {
+    await act(async () => {
+      root.render(createElement(SettingsModal))
+    })
+
+    const backdrop = host.querySelector<HTMLElement>('[data-settings-modal-backdrop]')
+    expect(backdrop).toBeTruthy()
+    expect(backdrop?.className).not.toContain('backdrop-blur')
+
+    const keymapButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Keymap'
+    )
+    expect(keymapButton).toBeTruthy()
+
+    await act(async () => {
+      keymapButton!.click()
+    })
+
+    expect(host.textContent).toContain('Shortcut editor')
+  })
+
   it('saves the daily directory when the edit is committed', async () => {
     await act(async () => {
       root.render(createElement(SettingsModal))

@@ -130,7 +130,9 @@ interface SettingsSubTab {
   description?: string;
   /** Search-item ids that live on this sub-tab, so search-jump can open the right one. */
   searchIds?: string[];
-  content: JSX.Element;
+  /** Lazily build only the visible sub-tab. Settings contains enough controls
+   *  that eagerly allocating every hidden panel noticeably stalls clicks. */
+  content: () => JSX.Element;
 }
 
 interface SettingsCategory extends SettingsSearchCategory<SettingsCategoryId> {
@@ -138,8 +140,9 @@ interface SettingsCategory extends SettingsSearchCategory<SettingsCategoryId> {
   title: string;
   description: string;
   keywords: string[];
-  /** A category renders either a single `content` pane or a set of `subTabs`. */
-  content?: JSX.Element;
+  /** A category renders either a lazy `content` pane or a set of `subTabs`.
+   *  Search metadata stays eager, but only the visible panel is built. */
+  content?: () => JSX.Element;
   subTabs?: SettingsSubTab[];
 }
 
@@ -1219,7 +1222,7 @@ export function SettingsModal(): JSX.Element {
           keywords: ["chevrons", "disclosure"],
         },
       ],
-      content: (
+      content: () => (
         <div className="space-y-6">
           <Section
             title="Theme"
@@ -1856,7 +1859,7 @@ export function SettingsModal(): JSX.Element {
             "leader-hint-duration",
             "scroll-off",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Vim"
@@ -1953,7 +1956,7 @@ export function SettingsModal(): JSX.Element {
             "ripgrep-binary-path",
             "fzf-binary-path",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Search"
@@ -2025,7 +2028,7 @@ export function SettingsModal(): JSX.Element {
             "pdfs-in-edit-mode",
             "time-format",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Writing"
@@ -2138,7 +2141,7 @@ export function SettingsModal(): JSX.Element {
             "quick-note-prefix",
             "quick-capture-hotkey",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Quick capture"
@@ -2172,7 +2175,7 @@ export function SettingsModal(): JSX.Element {
           ],
         },
       ],
-      content: (
+      content: () => (
         <div
           className="h-full"
           {...settingsSearchTargetProps("shortcut-editor")}
@@ -2219,7 +2222,7 @@ export function SettingsModal(): JSX.Element {
           ],
         },
       ],
-      content: (
+      content: () => (
         <div className="space-y-6">
           <Section
             title="Kanban statuses"
@@ -2318,7 +2321,7 @@ export function SettingsModal(): JSX.Element {
           keywords: ["numbers", "gutter", "position", "edge", "text", "align"],
         },
       ],
-      content: (
+      content: () => (
         <div className="space-y-6">
           <Section
             title="Fonts"
@@ -2778,7 +2781,7 @@ export function SettingsModal(): JSX.Element {
           title: "Location",
           description: "Where this vault lives, plus saved remote connections.",
           searchIds: ["vault-location", "saved-remote-workspaces"],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Location"
@@ -2949,7 +2952,7 @@ export function SettingsModal(): JSX.Element {
           description:
             "How primary notes, new drawings and databases, and view preferences are organized.",
           searchIds: ["primary-notes-location", "view-settings-scope"],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Primary Notes"
@@ -3098,7 +3101,7 @@ export function SettingsModal(): JSX.Element {
             "calendar-week-start",
             "calendar-week-numbers",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="Daily Notes"
@@ -3636,7 +3639,7 @@ export function SettingsModal(): JSX.Element {
             "trash-label",
             "tasks-label",
           ],
-          content: (
+          content: () => (
             <div className="space-y-6">
               <Section
                 title="System Folders"
@@ -3729,7 +3732,7 @@ export function SettingsModal(): JSX.Element {
           available: supportsCustomTemplates,
         },
       ],
-      content: (
+      content: () => (
         <div className="space-y-6">
           <Section
             title="Templates"
@@ -3894,7 +3897,7 @@ export function SettingsModal(): JSX.Element {
           keywords: ["mcp", "prompt", "instructions", "system prompt"],
         },
       ],
-      content: <McpSettings />,
+      content: () => <McpSettings />,
     },
     {
       id: "cli",
@@ -3945,7 +3948,7 @@ export function SettingsModal(): JSX.Element {
           keywords: ["raycast", "launcher", "extension", "install"],
         },
       ],
-      content: <CliSettings />,
+      content: () => <CliSettings />,
     },
     {
       id: "about",
@@ -3990,7 +3993,7 @@ export function SettingsModal(): JSX.Element {
           available: appInfo.runtime === "desktop",
         },
       ],
-      content: (
+      content: () => (
         <div className="space-y-6">
           <Section title="ZenNotes" settingId="zen-notes-version">
             <div className="px-5 py-5">
@@ -4220,8 +4223,12 @@ export function SettingsModal(): JSX.Element {
 
   return (
     <>
+      {/* The app is opaque, so a viewport-sized backdrop filter adds no useful
+          glass effect. On Electron/Linux it also forces every hover/click paint
+          through a full-screen compositor pass, making Settings feel delayed. */}
       <div
-        className="fixed inset-0 z-modal flex items-start justify-center bg-black/45 px-4 pt-[7vh] backdrop-blur-md"
+        data-settings-modal-backdrop
+        className="fixed inset-0 z-modal flex items-start justify-center bg-black/45 px-4 pt-[7vh]"
         onClick={() => setSettingsOpen(false)}
       >
         <div
@@ -4410,7 +4417,7 @@ export function SettingsModal(): JSX.Element {
                     }
                   />
                 ) : (
-                  visibleCategory.content
+                  visibleCategory.content?.()
                 )
               ) : (
                 <div className="flex h-full min-h-[280px] items-center justify-center rounded-3xl border border-dashed border-paper-300/70 bg-paper-50/35 px-6 text-center text-sm leading-6 text-ink-500">
@@ -4504,7 +4511,7 @@ function KeymapSettings({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex min-h-0 flex-1 flex-col rounded-3xl border border-paper-300/60 bg-paper-50/45 shadow-[0_14px_36px_rgba(15,23,42,0.04)]">
-        <div className="sticky top-0 z-10 rounded-t-[22px] border-b border-paper-300/55 bg-paper-50/95 px-5 py-4 backdrop-blur">
+        <div className="sticky top-0 z-10 rounded-t-[22px] border-b border-paper-300/55 bg-paper-50 px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="text-sm font-medium text-ink-900">
@@ -4868,7 +4875,7 @@ function CategorySubTabs({
           );
         })}
       </div>
-      <div>{active.content}</div>
+      <div>{active.content()}</div>
     </div>
   );
 }
