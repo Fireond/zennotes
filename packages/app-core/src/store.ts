@@ -162,7 +162,7 @@ import {
   type PaneLayout,
   type PaneLeaf
 } from './lib/pane-layout'
-import { paneModesWithPathMode, type PaneMode, type PaneModesByPath } from './lib/pane-mode'
+import { DEFAULT_PANE_MODE, type PaneMode } from './lib/pane-mode'
 
 export type NoteSortOrder =
   | 'none'
@@ -2220,10 +2220,9 @@ interface Store {
    *  persisted). Kept in the store — not Sidebar-local — so the keyboard nav in
    *  VimNav can expand/collapse date groups like real folders. (#301) */
   dateNavExpanded: string[]
-  /** Editor view mode (edit/split/preview) per pane, per note path. Ephemeral
-   *  (not persisted): kept in the store so it survives EditorPane remounts and a
-   *  split can inherit the source pane's mode instead of resetting to edit. (#321) */
-  paneModes: Record<string, PaneModesByPath>
+  /** One editor view mode (edit/split/preview) shared by every note and pane.
+   *  Ephemeral, matching the previous mode state: each launch starts in Edit. */
+  editorMode: PaneMode
   noteListCursorIndex: number
   connectionsCursorIndex: number
   connectionPreview: ConnectionPreviewState | null
@@ -2605,7 +2604,7 @@ interface Store {
   }) => Promise<void>
   /** Update sizes on a split node (for divider drag). */
   resizeSplit: (splitId: string, sizes: number[]) => void
-  setPaneModeForPath: (paneId: string, path: string | null, mode: PaneMode) => void
+  setEditorMode: (mode: PaneMode) => void
   /** Pin a tab within a specific pane — sticks it to the left of the
    *  strip and protects it from "Close Others" / "Close Tabs to Right". */
   pinTabInPane: (paneId: string, path: string) => void
@@ -3644,7 +3643,7 @@ export const useStore = create<Store>((set, get) => {
   focusedPanel: null,
   sidebarCursorIndex: 0,
   dateNavExpanded: [],
-  paneModes: {},
+  editorMode: DEFAULT_PANE_MODE,
   noteListCursorIndex: 0,
   connectionsCursorIndex: 0,
   connectionPreview: null,
@@ -6746,24 +6745,12 @@ export const useStore = create<Store>((set, get) => {
         activePaneId: newLeaf.id,
         noteContents: nextContents,
         noteDirty: nextDirty,
-        // Inherit the source pane's view mode so splitting a preview pane opens
-        // the new pane in preview too, not a reset-to-edit. (#321)
-        paneModes: {
-          ...cur.paneModes,
-          [newLeaf.id]: cur.paneModes[sourcePaneId ?? targetPaneId] ?? {}
-        },
         ...activeFieldsFrom(layout, newLeaf.id, nextContents, nextDirty)
       }
     })
   },
 
-  setPaneModeForPath: (paneId, path, mode) =>
-    set((s) => ({
-      paneModes: {
-        ...s.paneModes,
-        [paneId]: paneModesWithPathMode(s.paneModes[paneId] ?? {}, path, mode)
-      }
-    })),
+  setEditorMode: (mode) => set({ editorMode: mode }),
 
   resizeSplit: (splitId, sizes) => {
     set((s) => {

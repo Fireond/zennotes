@@ -202,7 +202,7 @@ export const HELP_CORE_CONCEPTS: HelpCard[] = [
   {
     title: 'Tabs and splits are first-class',
     body:
-      'Each editor pane can hold multiple tabs. Split the current tab right or down, move between panes with pane motions, switch the active note between Edit, Split, and Preview from commands, and, if you hide tabs, use the buffer switcher shortcut or `:buffers`. The active tab also has a full keyboard context menu, so actions like Close Others, Close Tabs to the Right, Pin Tab, Pin as Reference, Open in Floating Window, and Reveal in Finder stay accessible without the mouse. If you disable Vim mode, use the command palette instead.'
+      'Each editor pane can hold multiple tabs. Split the current tab right or down, move between panes with pane motions, and choose one global Edit, Split, or Preview mode that follows you across notes and panes. If you hide tabs, use the buffer switcher shortcut or `:buffers`. The active tab also has a full keyboard context menu, so actions like Close Others, Close Tabs to the Right, Pin Tab, Pin as Reference, Open in Floating Window, and Reveal in Finder stay accessible without the mouse. If you disable Vim mode, use the command palette instead.'
   },
   {
     title: 'Context menus are part of the keyboard model',
@@ -724,8 +724,8 @@ export const HELP_VIM_COMMANDS: HelpExCommand[] = [
   },
   {
     command: ':view edit|split|preview',
-    summary: 'Switch the active note layout',
-    detail: 'Change the current pane between editor-only, side-by-side split, and preview-only modes without clicking the toolbar.'
+    summary: 'Switch the global editor layout',
+    detail: 'Change every main note pane between editor-only, side-by-side split, and preview-only modes without clicking the toolbar.'
   },
   {
     command: ':zen [toggle|on|off] / :zenmode',
@@ -735,7 +735,7 @@ export const HELP_VIM_COMMANDS: HelpExCommand[] = [
   {
     command: ':editmode / :splitmode / :previewmode',
     summary: 'Direct mode aliases',
-    detail: 'Single-command aliases for switching the active note to Edit, Split, or Preview mode.'
+    detail: 'Single-command aliases for switching the global editor to Edit, Split, or Preview mode.'
   },
   {
     command: ':fold / :unfold',

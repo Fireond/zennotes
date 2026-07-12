@@ -213,12 +213,7 @@ import {
   pastedImageFilesFromClipboard,
   pastedImageInputFromFile
 } from '../lib/editor-paste-images'
-import {
-  paneModeForPath,
-  ZEN_SET_PANE_MODE_EVENT,
-  type PaneMode,
-  type PaneModesByPath
-} from '../lib/pane-mode'
+import { ZEN_SET_PANE_MODE_EVENT, type PaneMode } from '../lib/pane-mode'
 import { resolveCommentAnchor, selectionToCommentAnchor } from '../lib/comments'
 import { ZEN_OPEN_EDITOR_CONTEXT_MENU_EVENT } from '../lib/keyboard-context-menu'
 import {
@@ -703,8 +698,6 @@ function followEditorLink(target: string): boolean {
   return true
 }
 
-const EMPTY_PANE_MODES: PaneModesByPath = {}
-
 export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const paneId = pane.id
   const isActive = useStore((s) => s.activePaneId === paneId)
@@ -782,9 +775,8 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const vaultSettings = useStore((s) => s.vaultSettings)
   const autoCalendarPanel = useStore((s) => s.autoCalendarPanel)
 
-  const modesByPath = useStore((s) => s.paneModes[paneId]) ?? EMPTY_PANE_MODES
-  const setPaneModeForPath = useStore((s) => s.setPaneModeForPath)
-  const mode = paneModeForPath(modesByPath, activeTab)
+  const mode = useStore((s) => s.editorMode)
+  const setEditorMode = useStore((s) => s.setEditorMode)
   const [connectionsOpen, setConnectionsOpen] = useState(false)
   const [outlineOpen, setOutlineOpen] = useState(false)
   const [activeOutlineLine, setActiveOutlineLine] = useState<number | null>(null)
@@ -957,7 +949,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
 
 
   const applyPaneMode = useCallback((nextMode: PaneMode) => {
-    setPaneModeForPath(paneId, activeTab, nextMode)
+    setEditorMode(nextMode)
     setActivePane(paneId)
     setFocusedPanel('editor')
     requestAnimationFrame(() => {
@@ -967,7 +959,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       }
       focusEditorNormalMode()
     })
-  }, [activeTab, paneId, setPaneModeForPath, setActivePane, setFocusedPanel])
+  }, [paneId, setEditorMode, setActivePane, setFocusedPanel])
 
   // `zen:toggle-outline` — routed only to the active pane, same pattern
   // as the connections toggle.
@@ -1041,9 +1033,8 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     return () => window.removeEventListener(ZEN_OPEN_EDITOR_CONTEXT_MENU_EVENT, handler)
   }, [isActive, openEditorContextMenu])
 
-  // `zen:set-pane-mode` — active-pane-only route for command palette and
-  // vim ex commands that switch the current note between Edit / Split /
-  // Preview without touching the toolbar.
+  // `zen:set-pane-mode` — the active pane handles the command once, updates
+  // the global editor mode, and therefore switches every visible note pane.
   useEffect(() => {
     if (!isActive) return
     const handler = (event: Event): void => {

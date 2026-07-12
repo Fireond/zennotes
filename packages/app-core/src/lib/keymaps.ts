@@ -250,7 +250,7 @@ const KEYMAP_DEFINITIONS: KeymapDefinition[] = [
     scope: "app",
     group: "global",
     title: "Switch to editor mode",
-    description: "Show only the markdown editor for the active note.",
+    description: "Show only the markdown editor for every main note pane.",
     defaultBinding: "Mod+4",
   },
   {
@@ -259,7 +259,7 @@ const KEYMAP_DEFINITIONS: KeymapDefinition[] = [
     scope: "app",
     group: "global",
     title: "Switch to split mode",
-    description: "Show the editor and rendered preview side by side.",
+    description: "Show every main note as editor and rendered preview side by side.",
     defaultBinding: "Mod+5",
   },
   {
@@ -268,7 +268,7 @@ const KEYMAP_DEFINITIONS: KeymapDefinition[] = [
     scope: "app",
     group: "global",
     title: "Switch to preview mode",
-    description: "Show only the rendered preview for the active note.",
+    description: "Show only the rendered preview for every main note pane.",
     defaultBinding: "Mod+6",
   },
   {

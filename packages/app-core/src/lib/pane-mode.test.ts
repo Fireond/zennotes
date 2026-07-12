@@ -1,19 +1,28 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from 'vitest'
-import { paneModeForPath, paneModesWithPathMode, type PaneModesByPath } from './pane-mode'
+import {
+  DEFAULT_PANE_MODE,
+  requestPaneMode,
+  ZEN_SET_PANE_MODE_EVENT,
+  type PaneMode
+} from './pane-mode'
 
-describe('pane mode by path', () => {
-  it('defaults newly opened notes to edit mode without changing remembered notes', () => {
-    let modesByPath: PaneModesByPath = {}
+describe('global editor mode requests', () => {
+  it('starts in edit mode', () => {
+    expect(DEFAULT_PANE_MODE).toBe('edit')
+  })
 
-    modesByPath = paneModesWithPathMode(modesByPath, 'inbox/One.md', 'preview')
+  it('dispatches one mode request without a pane or note identity', () => {
+    let requested: PaneMode | null = null
+    const handler = (event: Event): void => {
+      requested = (event as CustomEvent<{ mode: PaneMode }>).detail.mode
+    }
+    window.addEventListener(ZEN_SET_PANE_MODE_EVENT, handler)
 
-    expect(paneModeForPath(modesByPath, 'inbox/One.md')).toBe('preview')
-    expect(paneModeForPath(modesByPath, 'inbox/Two.md')).toBe('edit')
+    requestPaneMode('preview')
 
-    modesByPath = paneModesWithPathMode(modesByPath, 'inbox/Two.md', 'split')
-
-    expect(paneModeForPath(modesByPath, 'inbox/One.md')).toBe('preview')
-    expect(paneModeForPath(modesByPath, 'inbox/Two.md')).toBe('split')
-    expect(paneModeForPath(modesByPath, 'inbox/Three.md')).toBe('edit')
+    expect(requested).toBe('preview')
+    window.removeEventListener(ZEN_SET_PANE_MODE_EVENT, handler)
   })
 })

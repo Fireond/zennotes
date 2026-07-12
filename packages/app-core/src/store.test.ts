@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TASKS_TAB_PATH, type VaultTask } from '@shared/tasks'
 import { databaseTabPath } from '@shared/databases'
 import { assetTabPath } from './lib/asset-tabs'
-import { findLeaf, type PaneLayout, type PaneLeaf } from './lib/pane-layout'
+import { allLeaves, findLeaf, type PaneLayout, type PaneLeaf } from './lib/pane-layout'
 
 function makeTask(content: string, taskIndex = 0): VaultTask {
   return {
@@ -168,6 +168,45 @@ describe('closed tab history', () => {
     const leaf = findLeaf(useStore.getState().paneLayout, reopenedPaneId)
     expect(leaf?.tabs).toEqual(['inbox/A.md', 'inbox/B.md'])
     expect(leaf?.activeTab).toBe('inbox/A.md')
+  })
+})
+
+describe('global editor mode', () => {
+  it('is shared across note switches and split panes', async () => {
+    const noteA = makeNote('A', 'inbox/A.md')
+    const noteB = makeNote('B', 'inbox/B.md')
+    installZen({
+      readNote: vi.fn((path: string) => Promise.resolve(path === noteA.path ? noteA : noteB))
+    })
+
+    const { useStore } = await loadStore()
+    const paneId = useStore.getState().activePaneId
+    useStore.setState({ notes: [noteA, noteB] })
+
+    expect(useStore.getState().editorMode).toBe('edit')
+    useStore.getState().setEditorMode('preview')
+
+    await useStore.getState().openNoteInPane(paneId, noteA.path)
+    await useStore.getState().openNoteInPane(paneId, noteB.path)
+    await useStore.getState().focusTabInPane(paneId, noteA.path)
+    expect(useStore.getState().editorMode).toBe('preview')
+
+    await useStore.getState().splitPaneWithTab({
+      targetPaneId: paneId,
+      sourcePaneId: paneId,
+      edge: 'right',
+      path: noteB.path
+    })
+
+    const leaves = allLeaves(useStore.getState().paneLayout)
+    expect(leaves).toHaveLength(2)
+    for (const leaf of leaves) {
+      useStore.getState().setActivePane(leaf.id)
+      expect(useStore.getState().editorMode).toBe('preview')
+    }
+
+    useStore.getState().setEditorMode('split')
+    expect(useStore.getState().editorMode).toBe('split')
   })
 })
 
