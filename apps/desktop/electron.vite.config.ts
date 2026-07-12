@@ -121,6 +121,7 @@ export default defineConfig({
         // CLI wrapper script (build/zen) need.
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
+          'user-config-worker': resolve(__dirname, 'src/main/user-config-worker.ts'),
           mcp: resolve(__dirname, 'src/mcp/index.ts'),
           cli: resolve(__dirname, 'src/cli/index.ts')
         }

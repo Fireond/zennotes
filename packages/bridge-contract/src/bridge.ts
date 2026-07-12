@@ -50,6 +50,11 @@ import type {
 import type { AppConfigPortable } from '@zennotes/shared-domain/app-config'
 import type { CustomTheme } from '@zennotes/shared-domain/custom-themes'
 import type { Override } from '@zennotes/shared-domain/overrides'
+import type {
+  UserCommandContext,
+  UserCommandInvocation,
+  UserConfigSnapshot
+} from './user-config'
 
 export interface ZenCapabilities {
   supportsUpdater: boolean
@@ -267,6 +272,14 @@ export interface ZenBridge {
   /** Subscribe to external edits of the config file (e.g. a synced dotfile or
    *  a hand-edit). The callback receives the new portable config. */
   onConfigChange(cb: (next: AppConfigPortable) => void): () => void
+  /** Trusted programmable Vim mappings and commands from init.mjs (desktop workspace only). */
+  getUserConfig?(): Promise<UserConfigSnapshot>
+  /** Re-evaluate init.mjs, retaining the last good config if evaluation fails. */
+  reloadUserConfig?(): Promise<UserConfigSnapshot>
+  /** Run a registered user command in the isolated script host. */
+  invokeUserCommand?(id: string, context: UserCommandContext): Promise<UserCommandInvocation>
+  /** Subscribe to successful reloads and load/runtime errors. */
+  onUserConfigChange?(cb: (next: UserConfigSnapshot) => void): () => void
   /** User themes loaded from `~/.config/zennotes/themes/<slug>/`. Empty on web. */
   listCustomThemes(): Promise<CustomTheme[]>
   /** Absolute path of the custom-themes directory, or null when unsupported. */

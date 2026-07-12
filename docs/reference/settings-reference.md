@@ -93,6 +93,9 @@ Important current examples:
 
 These shortcuts are editable from Settings instead of being hard-coded renderer-only behavior.
 
+The desktop app also supports config-file-only Vim remaps and trusted buffer scripts in
+`~/.config/zennotes/init.mjs`. See [Programmable Vim Configuration](./programmable-vim-config.md).
+
 ### Picker navigation
 
 Command-driven pickers use the shared keymap model and also support Vim-style list movement.

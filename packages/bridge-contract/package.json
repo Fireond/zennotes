@@ -6,7 +6,8 @@
   "exports": {
     "./bridge": "./src/bridge.ts",
     "./ipc": "./src/ipc.ts",
-    "./templates": "./src/templates.ts"
+    "./templates": "./src/templates.ts",
+    "./user-config": "./src/user-config.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",

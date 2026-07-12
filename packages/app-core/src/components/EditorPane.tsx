@@ -3422,6 +3422,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
                   {editorReady ? (
                     <div
                       ref={setContainerRef}
+                      data-user-vim-config="true"
+                      data-user-vim-note-path={content.path}
+                      data-user-vim-pane-id={paneId}
                       className={[
                         'min-h-0 min-w-0 flex-1',
                         // WYSIWYG styling (code-block cards, etc.) is gated on

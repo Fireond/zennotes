@@ -105,7 +105,8 @@ import {
   getPortableConfigSnapshot,
   setPortableConfig,
   getConfigFilePath,
-  ensureConfigFile
+  ensureConfigFile,
+  getConfigDir
 } from './app-config'
 import {
   getCustomThemesDir,
@@ -195,6 +196,12 @@ import {
   markdownPathsFromArgv,
   resolveMarkdownOpenTarget
 } from './file-open'
+import { UserConfigHost } from './user-config-host'
+import type {
+  UserCommandContext,
+  UserCommandInvocation,
+  UserConfigSnapshot
+} from '@zennotes/bridge-contract/user-config'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const nodeRequire = createRequire(import.meta.url)
@@ -217,6 +224,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let mainWindow: BrowserWindow | null = null
+let userConfigHost: UserConfigHost | null = null
 let mainWindowReadyForAppEvents = false
 let creatingMainWindow: Promise<BrowserWindow> | null = null
 let currentVault: VaultInfo | null = null
@@ -255,6 +263,7 @@ const APP_DISCORD_URL = 'https://discord.gg/W4fWzapKS6'
 const APP_REPOSITORY_URL = 'https://github.com/ZenNotes/zennotes'
 const APP_RELEASES_URL = 'https://github.com/ZenNotes/zennotes/releases/latest'
 const APP_ISSUES_URL = 'https://github.com/ZenNotes/zennotes/issues'
+const USER_CONFIG_FILE_NAME = 'init.mjs'
 const userDataPathOverride = process.env['ZENNOTES_USER_DATA_PATH']?.trim()
 if (userDataPathOverride && (process.env['ZEN_PERF'] === '1' || !app.isPackaged)) {
   app.setPath('userData', path.resolve(userDataPathOverride))
@@ -1968,6 +1977,15 @@ function pruneListNotesStreamStates(): void {
   }
 }
 
+function userConfigHostForEvent(event: IpcMainInvokeEvent): UserConfigHost {
+  const win = requireEventWindow(event)
+  if (!isWorkspaceWindow(win)) {
+    throw new Error('User configuration is only available in workspace windows.')
+  }
+  if (!userConfigHost) throw new Error('User configuration is not initialized.')
+  return userConfigHost
+}
+
 function registerIpc(): void {
   const handle = <Args extends unknown[], Result>(
     channel: string,
@@ -2875,6 +2893,25 @@ function registerIpc(): void {
     const file = await ensureConfigFile()
     shell.showItemInFolder(file)
   })
+  handle(IPC.USER_CONFIG_GET, (event): UserConfigSnapshot => {
+    return userConfigHostForEvent(event).getSnapshot()
+  })
+  handle(IPC.USER_CONFIG_RELOAD, async (event): Promise<UserConfigSnapshot> => {
+    return await userConfigHostForEvent(event).reload()
+  })
+  handle(
+    IPC.USER_CONFIG_INVOKE,
+    async (
+      event,
+      id: string,
+      context: UserCommandContext
+    ): Promise<UserCommandInvocation> => {
+      if (typeof id !== 'string' || !id.trim()) {
+        return { ok: false, error: 'User command id must be a non-empty string.' }
+      }
+      return await userConfigHostForEvent(event).invoke(id, context)
+    }
+  )
   handle(IPC.CUSTOM_THEMES_LIST, () => listCustomThemes())
   handle(IPC.CUSTOM_THEMES_GET_DIR, () => getCustomThemesDir())
   handle(IPC.CUSTOM_THEMES_REVEAL, async (_event, slug?: string) => {
@@ -2904,6 +2941,15 @@ function broadcastConfigChange(next: AppConfigPortable): void {
   if (isMac()) installAppMenu()
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(IPC.CONFIG_ON_CHANGE, next)
+  }
+}
+
+/** User scripts are intentionally exposed only to full workspace renderers. */
+function broadcastUserConfigChange(next: UserConfigSnapshot): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed() && isWorkspaceWindow(win)) {
+      win.webContents.send(IPC.USER_CONFIG_ON_CHANGE, next)
+    }
   }
 }
 
@@ -3600,6 +3646,17 @@ app.whenReady().then(async () => {
   // preload's synchronous getConfigSync() returns real data on first paint.
   await initAppConfig(broadcastConfigChange)
 
+  // Trusted programmable Vim mappings and buffer commands live in init.mjs.
+  // Evaluate them in a Node-enabled utility process before a workspace renderer
+  // starts, then watch the file and atomically retain the last working process
+  // whenever a hand edit fails to load.
+  userConfigHost = new UserConfigHost({
+    configPath: path.join(getConfigDir(), USER_CONFIG_FILE_NAME),
+    workerPath: path.join(__dirname, 'user-config-worker.js'),
+    onChange: broadcastUserConfigChange
+  })
+  await userConfigHost.start()
+
   // Custom user themes live alongside the config dotfile. Seed the dir on first
   // run, then watch it so edits apply live. Await the seed so the watcher
   // attaches to a directory that already exists.
@@ -3696,6 +3753,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   windowVaults.stopAll()
   stopRemoteWatch()
+  void userConfigHost?.stop()
   quickCaptureQuitting = true
   unregisterQuickCaptureHotkey()
 })

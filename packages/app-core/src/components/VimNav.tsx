@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { completionStatus } from '@codemirror/autocomplete'
+import type { EditorView } from '@codemirror/view'
 import { isTagsViewActive, isTasksViewActive, useStore } from '../store'
 import { HintOverlay } from './HintOverlay'
 import { WhichKeyOverlay, type WhichKeyItem } from './WhichKeyOverlay'
 import {
+  bufferedVimKeysForEditor,
   clearEditorPendingVimStatus,
   getVisiblePanels,
   hintTargetOpensNote,
@@ -11,7 +13,8 @@ import {
   isEditorFocused,
   isVimAwaitingArgument,
   resolveNextPanel,
-  shouldYieldToHomeNav
+  shouldYieldToHomeNav,
+  userVimModeForEditor
 } from '../lib/vim-nav'
 import { focusPaneInDirection } from '../lib/pane-nav'
 import { findLeaf } from '../lib/pane-layout'
@@ -32,6 +35,10 @@ import {
 } from '../lib/keyboard-context-menu'
 import { navigateActiveBuffer } from '../lib/buffer-navigation'
 import { focusEditorNormalMode } from '../lib/editor-focus'
+import {
+  getUserVimSequenceMatch,
+  sequenceTokenToVimNotation
+} from '../lib/user-vim-keymaps'
 
 function escapeForAttr(value: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value)
@@ -57,6 +64,7 @@ export function VimNav(): JSX.Element | null {
   const keymapOverrides = useStore((s) => s.keymapOverrides)
   // All control-flow flags are refs so the handler never stales.
   const ctrlWPending = useRef(false)
+  const ctrlWEditorView = useRef<EditorView | null>(null)
   const jumpTopPending = useRef(0)
   const previousBufferPending = useRef(0)
   const nextBufferPending = useRef(0)
@@ -289,6 +297,8 @@ export function VimNav(): JSX.Element | null {
   useEffect(() => {
     if (vimMode) return
     ctrlWPending.current = false
+    clearEditorPendingVimStatus(ctrlWEditorView.current)
+    ctrlWEditorView.current = null
     jumpTopPending.current = 0
     previousBufferPending.current = 0
     nextBufferPending.current = 0
@@ -402,6 +412,48 @@ export function VimNav(): JSX.Element | null {
       const previewEl = getPreviewScrollElement()
       const hoverPreviewEl = getHoverPreviewScrollElement()
 
+      // Explicit init.mjs mappings own their complete buffered sequence while
+      // the main editor is focused. Yield before leader/pane/app routing so
+      // CodeMirror-Vim can dispatch its configured target.
+      const userMappingMode = isEditorFocused(state.editorViewRef)
+        ? userVimModeForEditor(state.editorViewRef, state.vimMode)
+        : null
+      const userMappingToken = sequenceTokenToVimNotation(sequenceTokenFromEvent(e))
+      const bufferedUserSequence = userMappingMode
+        ? bufferedVimKeysForEditor(state.editorViewRef)
+        : ''
+      if (
+        userMappingMode &&
+        userMappingToken &&
+        (
+          getUserVimSequenceMatch(userMappingMode, userMappingToken) !== 'none' ||
+          (bufferedUserSequence &&
+            (getUserVimSequenceMatch(userMappingMode, bufferedUserSequence) !== 'none' ||
+              getUserVimSequenceMatch(
+                userMappingMode,
+                `${bufferedUserSequence}${userMappingToken}`
+              ) !== 'none'))
+        )
+      ) {
+        return
+      }
+
+      // An explicitly unbound pane prefix must release Ctrl/Mod+W to the
+      // close-tab action before CodeMirror-Vim's built-in <C-w> idle mapping
+      // consumes the event at the editor target. Insert mode keeps Vim's
+      // delete-previous-word behavior.
+      if (
+        userMappingMode === 'n' &&
+        overrides['vim.panePrefix'] === null &&
+        matchesShortcutBinding(e, getKeymapBinding(overrides, 'global.closeActiveTab'))
+      ) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        clearEditorPendingVimStatus(state.editorViewRef)
+        if (state.selectedPath) void state.closeActiveNote()
+        return
+      }
+
       // Formatting shortcuts are owned by CodeMirror's mode-aware keymap: in
       // Vim insert mode they format, while normal/visual mode keeps the Ctrl
       // chords available to Vim and the app-level routes below. VimNav only
@@ -509,7 +561,11 @@ export function VimNav(): JSX.Element | null {
         e.stopImmediatePropagation()
         ctrlWPending.current = false
         if (ctrlWTimer.current) clearTimeout(ctrlWTimer.current)
-        clearEditorPendingVimStatus(state.editorViewRef)
+        clearEditorPendingVimStatus(ctrlWEditorView.current)
+        if (state.editorViewRef !== ctrlWEditorView.current) {
+          clearEditorPendingVimStatus(state.editorViewRef)
+        }
+        ctrlWEditorView.current = null
         const editorHasFocus = isEditorFocused(state.editorViewRef)
 
         // <C-w>v / <C-w>s → vim-style splits. Clones the active pane's
@@ -676,12 +732,18 @@ export function VimNav(): JSX.Element | null {
         e.preventDefault()
         e.stopImmediatePropagation()
         if (isEditorFocused(state.editorViewRef)) state.setFocusedPanel('editor')
-        clearEditorPendingVimStatus(state.editorViewRef)
+        ctrlWEditorView.current = isEditorFocused(state.editorViewRef)
+          ? state.editorViewRef
+          : null
+        clearEditorPendingVimStatus(ctrlWEditorView.current)
         ctrlWPending.current = true
         if (ctrlWTimer.current) clearTimeout(ctrlWTimer.current)
         ctrlWTimer.current = setTimeout(() => {
           ctrlWPending.current = false
-          clearEditorPendingVimStatus(useStore.getState().editorViewRef)
+          clearEditorPendingVimStatus(ctrlWEditorView.current)
+          const latestView = useStore.getState().editorViewRef
+          if (latestView !== ctrlWEditorView.current) clearEditorPendingVimStatus(latestView)
+          ctrlWEditorView.current = null
         }, 800)
         return
       }
@@ -1107,6 +1169,10 @@ export function VimNav(): JSX.Element | null {
       window.removeEventListener('keyup', onKeyUp, true)
       previousBufferPending.current = 0
       nextBufferPending.current = 0
+      ctrlWPending.current = false
+      clearEditorPendingVimStatus(ctrlWEditorView.current)
+      ctrlWEditorView.current = null
+      if (ctrlWTimer.current) clearTimeout(ctrlWTimer.current)
       if (previousBufferTimer.current) clearTimeout(previousBufferTimer.current)
       if (nextBufferTimer.current) clearTimeout(nextBufferTimer.current)
       resetLeader()

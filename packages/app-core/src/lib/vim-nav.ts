@@ -2,6 +2,7 @@ import type { EditorView } from '@codemirror/view'
 import { getCM } from '@replit/codemirror-vim'
 import type { NoteFolder, NoteMeta } from '@shared/ipc'
 import { isWorkspaceVirtualTabPath } from './workspace-tabs'
+import type { UserVimMappingMode } from './user-vim-keymaps'
 
 /**
  * True when a Vim-hint (`<leader>h`) target opens a note the editor should land
@@ -97,6 +98,38 @@ export function isEditorInsertMode(view: EditorView | null, vimMode: boolean): b
   if (!view || !vimMode) return false
   const cm = getCM(view)
   return cm?.state.vim?.insertMode === true
+}
+
+/** Current CodeMirror-Vim context in the compact notation used by user mappings. */
+export function userVimModeForEditor(
+  view: EditorView | null,
+  vimMode: boolean
+): UserVimMappingMode | null {
+  if (!view || !vimMode) return null
+  const vim = getCM(view)?.state?.vim as
+    | {
+        insertMode?: boolean
+        visualMode?: boolean
+        inputState?: { operator?: unknown }
+      }
+    | undefined
+  if (!vim) return null
+  if (vim.insertMode) return 'i'
+  if (vim.visualMode) return 'v'
+  if (vim.inputState?.operator) return 'o'
+  return 'n'
+}
+
+/** Keys CodeMirror-Vim has already buffered for a multi-key command/mapping. */
+export function bufferedVimKeysForEditor(view: EditorView | null): string {
+  if (!view) return ''
+  const keyBuffer = (
+    getCM(view)?.state?.vim as
+      | { inputState?: { keyBuffer?: unknown } }
+      | undefined
+  )?.inputState?.keyBuffer
+  if (!Array.isArray(keyBuffer)) return ''
+  return keyBuffer.filter((key): key is string => typeof key === 'string').join('')
 }
 
 /**

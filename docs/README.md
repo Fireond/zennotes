@@ -34,6 +34,7 @@ If you are new to ZenNotes, read these first:
 ## Reference
 
 - [Settings Reference](./reference/settings-reference.md)
+- [Programmable Vim Configuration](./reference/programmable-vim-config.md)
 - [Tasks Reference](./reference/tasks-reference.md)
 - [Vault and Folder Model](./reference/vault-and-folder-model.md)
 - [Runtime and Package Map](./reference/runtime-and-package-map.md)

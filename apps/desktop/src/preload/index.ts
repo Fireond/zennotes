@@ -15,6 +15,11 @@ import type { AppConfigPortable } from '@shared/app-config'
 import type { CustomTheme } from '@shared/custom-themes'
 import type { Override } from '@shared/overrides'
 import type {
+  UserCommandContext,
+  UserCommandInvocation,
+  UserConfigSnapshot
+} from '@zennotes/bridge-contract/user-config'
+import type {
   AppUpdateState,
   AssetMeta,
   CliInstallStatus,
@@ -518,6 +523,20 @@ const api: ZenBridge = {
     const listener = (_: unknown, next: AppConfigPortable): void => cb(next)
     ipcRenderer.on(IPC.CONFIG_ON_CHANGE, listener)
     return () => ipcRenderer.removeListener(IPC.CONFIG_ON_CHANGE, listener)
+  },
+  getUserConfig: (): Promise<UserConfigSnapshot> =>
+    ipcRenderer.invoke(IPC.USER_CONFIG_GET),
+  reloadUserConfig: (): Promise<UserConfigSnapshot> =>
+    ipcRenderer.invoke(IPC.USER_CONFIG_RELOAD),
+  invokeUserCommand: (
+    id: string,
+    context: UserCommandContext
+  ): Promise<UserCommandInvocation> =>
+    ipcRenderer.invoke(IPC.USER_CONFIG_INVOKE, id, context),
+  onUserConfigChange: (cb: (next: UserConfigSnapshot) => void): (() => void) => {
+    const listener = (_: unknown, next: UserConfigSnapshot): void => cb(next)
+    ipcRenderer.on(IPC.USER_CONFIG_ON_CHANGE, listener)
+    return () => ipcRenderer.removeListener(IPC.USER_CONFIG_ON_CHANGE, listener)
   },
 
   listCustomThemes: (): Promise<CustomTheme[]> => ipcRenderer.invoke(IPC.CUSTOM_THEMES_LIST),

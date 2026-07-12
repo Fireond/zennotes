@@ -42,6 +42,7 @@ import {
   getDefaultKeymapBinding,
   getKeymapBinding,
   getSequenceTokens,
+  isMacPlatform,
   type KeymapId,
   type KeymapOverrides
 } from '../lib/keymaps'
@@ -49,9 +50,26 @@ import { navigateActiveBuffer } from '../lib/buffer-navigation'
 import { applyVimInsertEscape } from '../lib/vim-insert-escape'
 import { listContinuationPrefix } from '../lib/list-continuation'
 import { focusEditorNormalMode } from '../lib/editor-focus'
+import {
+  applyUserVimMappings,
+  clearUserVimMappings,
+  isUserVimEditorTarget,
+  type UserVimMappingRegistration
+} from '../lib/user-vim-keymaps'
+import {
+  getUserConfigSnapshot,
+  initializeUserConfig,
+  subscribeUserConfig
+} from '../lib/user-config-state'
+import {
+  executeUserVimCommand,
+  reportUserVimCommandError
+} from '../lib/user-command-execution'
+import { useToastStore } from '../lib/toast'
 
 let vimCommandsRegistered = false
 let syncedVimBindings: Partial<Record<KeymapId, string[]>> = {}
+let lastReportedUserConfigErrorRevision = -1
 
 const DEFAULT_VIM_MAPPINGS_TO_CLEAR = [
   'gd',
@@ -131,7 +149,8 @@ function toVimSequenceToken(token: string): string | null {
       if (part === 'Ctrl') return 'C'
       if (part === 'Alt') return 'A'
       if (part === 'Shift') return 'S'
-      if (part === 'Meta' || part === 'Mod') return 'D'
+      if (part === 'Meta') return 'M'
+      if (part === 'Mod') return isMacPlatform() ? 'M' : 'C'
       return null
     })
     .filter(Boolean) as string[]
@@ -148,6 +167,20 @@ function toVimSequence(binding: string | null): string | null {
     .map((token) => toVimSequenceToken(token))
   if (tokens.length === 0 || tokens.some((token) => !token)) return null
   return tokens.join('')
+}
+
+function expandUserLeaderMappings(
+  mappings: readonly UserVimMappingRegistration[],
+  overrides: KeymapOverrides
+): UserVimMappingRegistration[] {
+  const leader = toVimSequence(getKeymapBinding(overrides, 'vim.leaderPrefix'))
+  return mappings.map((mapping) => ({
+    ...mapping,
+    lhs:
+      leader == null
+        ? mapping.lhs
+        : mapping.lhs.replace(/<leader>/gi, leader)
+  }))
 }
 
 function paneMapBindings(overrides: KeymapOverrides, actionId: KeymapId): string[] {
@@ -1431,6 +1464,65 @@ export function Editor(): JSX.Element {
   useEffect(() => {
     registerVimCommands()
     syncVimKeymaps(keymapOverrides)
+  }, [keymapOverrides])
+
+  useEffect(() => {
+    let active = true
+    let latest = getUserConfigSnapshot()
+    const syncFocusedEditorMappings = (): void => {
+      if (!active) return
+      if (!isUserVimEditorTarget(document.activeElement)) {
+        clearUserVimMappings()
+        return
+      }
+      applyUserVimMappings(expandUserLeaderMappings(latest.mappings, keymapOverrides), {
+        runCommand: executeUserVimCommand,
+        onCommandError: reportUserVimCommandError
+      })
+    }
+    const applySnapshot = (next: ReturnType<typeof getUserConfigSnapshot>): void => {
+      if (!active) return
+      latest = next
+      try {
+        syncFocusedEditorMappings()
+      } catch (error) {
+        useToastStore.getState().addToast(
+          `Could not apply user Vim mappings: ${error instanceof Error ? error.message : String(error)}`,
+          'error'
+        )
+      }
+      if (next.error && next.revision !== lastReportedUserConfigErrorRevision) {
+        lastReportedUserConfigErrorRevision = next.revision
+        useToastStore.getState().addToast(`User config: ${next.error}`, 'error')
+      }
+    }
+
+    const syncFocusedEditorMappingsWithError = (): void => {
+      try {
+        syncFocusedEditorMappings()
+      } catch (error) {
+        useToastStore.getState().addToast(
+          `Could not apply user Vim mappings: ${error instanceof Error ? error.message : String(error)}`,
+          'error'
+        )
+      }
+    }
+    const syncAfterFocusOut = (): void => {
+      queueMicrotask(syncFocusedEditorMappingsWithError)
+    }
+
+    const unsubscribe = subscribeUserConfig(applySnapshot)
+    document.addEventListener('focusin', syncFocusedEditorMappingsWithError)
+    document.addEventListener('focusout', syncAfterFocusOut)
+    void initializeUserConfig()
+    applySnapshot(getUserConfigSnapshot())
+    return () => {
+      active = false
+      unsubscribe()
+      document.removeEventListener('focusin', syncFocusedEditorMappingsWithError)
+      document.removeEventListener('focusout', syncAfterFocusOut)
+      clearUserVimMappings()
+    }
   }, [keymapOverrides])
 
   useEffect(() => {
