@@ -77,7 +77,11 @@ import {
   parseTemplateDestination
 } from './lib/move-note'
 import type { KeymapId, KeymapOverrides } from './lib/keymaps'
-import { normalizeKeymapOverrides } from './lib/keymaps'
+import {
+  getDefaultKeymapBinding,
+  normalizeKeymapBinding,
+  normalizeKeymapOverrides
+} from './lib/keymaps'
 import {
   PORTABLE_PREF_KEYS,
   pickPortablePrefs,
@@ -2416,6 +2420,7 @@ interface Store {
   setVimInsertEscape: (sequence: string) => void
   setVimYankToClipboard: (on: boolean) => void
   setKeymapBinding: (id: KeymapId, binding: string | null) => void
+  resetKeymapBinding: (id: KeymapId) => void
   resetAllKeymaps: () => void
   setWhichKeyHints: (on: boolean) => void
   setWhichKeyHintMode: (mode: WhichKeyHintMode) => void
@@ -5421,8 +5426,24 @@ export const useStore = create<Store>((set, get) => {
   setKeymapBinding: (id, binding) => {
     set((s) => {
       const nextOverrides = { ...s.keymapOverrides }
-      if (binding) nextOverrides[id] = binding
-      else delete nextOverrides[id]
+      if (binding === null) {
+        nextOverrides[id] = null
+      } else {
+        const normalized = normalizeKeymapBinding(id, binding)
+        if (normalized && normalized !== getDefaultKeymapBinding(id)) {
+          nextOverrides[id] = normalized
+        } else {
+          delete nextOverrides[id]
+        }
+      }
+      return { keymapOverrides: nextOverrides }
+    })
+    savePrefs(collectPrefs(get()))
+  },
+  resetKeymapBinding: (id) => {
+    set((s) => {
+      const nextOverrides = { ...s.keymapOverrides }
+      delete nextOverrides[id]
       return { keymapOverrides: nextOverrides }
     })
     savePrefs(collectPrefs(get()))

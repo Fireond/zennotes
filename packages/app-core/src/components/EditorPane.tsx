@@ -34,7 +34,8 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
-  tooltips
+  tooltips,
+  type KeyBinding
 } from '@codemirror/view'
 import { Vim, getCM, vim } from '@replit/codemirror-vim'
 import type { AssetMeta, ImportedAsset, NoteComment, NoteFolder } from '@shared/ipc'
@@ -262,7 +263,8 @@ const LARGE_DOC_EDITOR_HYDRATE_DELAY_MS = 180
 
 /** Convert a ZenNotes binding string ("Alt+ArrowUp", "Mod+K") to a CodeMirror
  *  key string ("Alt-ArrowUp", "Mod-k"). */
-function toCmKey(binding: string): string {
+function toCmKey(binding: string | null): string | null {
+  if (binding === null) return null
   const parts = binding.split('+')
   const base = parts.pop() ?? ''
   const mods = parts.join('-')
@@ -275,25 +277,41 @@ function toCmKey(binding: string): string {
 // cm-vim-default-keymap). Built behind a compartment and reconfigured on Vim
 // toggle or keymap-override changes.
 function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extension {
-  return keymap.of([
-    {
-      key: 'Mod-f',
+  const configuredBindings: KeyBinding[] = []
+  const nonVimSearchKey = !vimMode
+    ? toCmKey(getKeymapBinding(overrides, 'global.searchNotesNonVim'))
+    : null
+  if (nonVimSearchKey) {
+    configuredBindings.push({
+      key: nonVimSearchKey,
       run: () => {
-        const state = useStore.getState()
-        if (state.vimMode) return false
-        state.setSearchOpen(true)
+        useStore.getState().setSearchOpen(true)
         return true
       }
-    },
+    })
+  }
+  const moveLineUpKey = toCmKey(getKeymapBinding(overrides, 'editor.moveLineUp'))
+  const moveLineDownKey = toCmKey(getKeymapBinding(overrides, 'editor.moveLineDown'))
+  if (moveLineUpKey) configuredBindings.push({ key: moveLineUpKey, run: moveLineUp })
+  if (moveLineDownKey) configuredBindings.push({ key: moveLineDownKey, run: moveLineDown })
+
+  // These commands are exposed through ZenNotes' configurable keymap. Remove
+  // CodeMirror's built-in copies so remapping or unbinding doesn't leave the
+  // shipped key active underneath the configured entry.
+  const baseKeymap = vimAwareDefaultKeymap(vimMode).filter(
+    (binding) => binding.key !== 'Alt-ArrowUp' && binding.key !== 'Alt-ArrowDown'
+  )
+  const editorSearchKeymap = searchKeymap.filter((binding) => binding.key !== 'Mod-f')
+
+  return keymap.of([
     // Move the current line (or selection) up/down — reorders the markdown so
     // it persists in the file. Listed before defaultKeymap so the configured
     // binding wins; works in Vim normal/insert and non-Vim alike.
-    { key: toCmKey(getKeymapBinding(overrides, 'editor.moveLineUp')), run: moveLineUp },
-    { key: toCmKey(getKeymapBinding(overrides, 'editor.moveLineDown')), run: moveLineDown },
+    ...configuredBindings,
     indentWithTab,
-    ...vimAwareDefaultKeymap(vimMode),
+    ...baseKeymap,
     ...vimAwareAuxiliaryKeymap(historyKeymap, vimMode),
-    ...vimAwareAuxiliaryKeymap(searchKeymap, vimMode),
+    ...vimAwareAuxiliaryKeymap(editorSearchKeymap, vimMode),
     ...completionKeymap
   ])
 }

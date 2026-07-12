@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => {
       fzfBinaryPath: null,
       hideBuiltinTemplates: false,
       interfaceFont: null,
-      keymapOverrides: {},
+      keymapOverrides: {} as Record<string, string | null>,
       lineNumberMode: 'off',
       monoFont: null,
       previewMaxWidth: 760,
@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => {
       remoteWorkspaceInfo: null,
       remoteWorkspaceProfiles: [],
       ripgrepBinaryPath: null,
+      resetKeymapBinding: vi.fn(),
+      setKeymapBinding: vi.fn(),
       setSettingsOpen: vi.fn(),
       setVaultSettings: vi.fn(),
       showSidebarChevrons: true,
@@ -60,6 +62,8 @@ const mocks = vi.hoisted(() => {
 
   return {
     state,
+    resetKeymapBinding: state.resetKeymapBinding,
+    setKeymapBinding: state.setKeymapBinding,
     setSettingsOpen: state.setSettingsOpen,
     setVaultSettings: state.setVaultSettings
   }
@@ -109,6 +113,7 @@ describe('SettingsModal date note directories', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.state.keymapOverrides = {}
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     Object.defineProperty(window, 'zen', {
       configurable: true,
@@ -180,6 +185,73 @@ describe('SettingsModal date note directories', () => {
     })
 
     expect(host.textContent).toContain('Shortcut editor')
+  })
+
+  it('saves an explicit unbound keymap separately from restoring its default', async () => {
+    await act(async () => {
+      root.render(createElement(SettingsModal))
+    })
+
+    const keymapButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Keymap'
+    )
+    await act(async () => {
+      keymapButton!.click()
+    })
+
+    const row = host.querySelector<HTMLElement>('[data-keymap-id="global.searchNotes"]')
+    expect(row).toBeTruthy()
+    const changeButton = [...row!.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Change…'
+    )
+    await act(async () => {
+      changeButton!.click()
+    })
+
+    const unbindButton = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Unbind'
+    )
+    await act(async () => {
+      unbindButton!.click()
+    })
+    expect(document.body.textContent).toContain('Unbound')
+
+    const saveButton = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Save unbound'
+    )
+    await act(async () => {
+      saveButton!.click()
+    })
+
+    expect(mocks.setKeymapBinding).toHaveBeenCalledWith('global.searchNotes', null)
+    expect(mocks.resetKeymapBinding).not.toHaveBeenCalled()
+  })
+
+  it('shows an unbound row as modified and can restore its default', async () => {
+    mocks.state.keymapOverrides = { 'global.searchNotes': null }
+    await act(async () => {
+      root.render(createElement(SettingsModal))
+    })
+
+    const keymapButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Keymap'
+    )
+    await act(async () => {
+      keymapButton!.click()
+    })
+
+    const row = host.querySelector<HTMLElement>('[data-keymap-id="global.searchNotes"]')
+    expect(row?.textContent).toContain('Unbound')
+    const restoreButton = [...row!.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent?.trim() === 'Restore default'
+    )
+    expect(restoreButton?.disabled).toBe(false)
+
+    await act(async () => {
+      restoreButton!.click()
+    })
+    expect(mocks.resetKeymapBinding).toHaveBeenCalledWith('global.searchNotes')
+    expect(mocks.setKeymapBinding).not.toHaveBeenCalled()
   })
 
   it('saves the daily directory when the edit is committed', async () => {

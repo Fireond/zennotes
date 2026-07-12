@@ -23,10 +23,17 @@ import {
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  type KeyBinding,
   tooltips
 } from '@codemirror/view'
 import { vim } from '@replit/codemirror-vim'
-import { history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import {
+  history,
+  historyKeymap,
+  indentWithTab,
+  moveLineDown,
+  moveLineUp
+} from '@codemirror/commands'
 import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-default-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
@@ -44,6 +51,7 @@ import { dateShortcutSource } from '../lib/cm-date-shortcuts'
 import { wikilinkSource, wikilinkHeadingSource } from '../lib/cm-wikilinks'
 import { completionNavKeymap } from '../lib/cm-completion-nav'
 import { classifyLocalAssetHref, type LocalAssetKind } from '../lib/local-assets'
+import { getKeymapBinding, type KeymapOverrides } from '../lib/keymaps'
 import { LazyPreview as Preview } from './LazyPreview'
 import { CloseIcon, PanelLeftIcon, PinIcon } from './icons'
 
@@ -113,6 +121,55 @@ function lineNumberExtension(mode: LineNumberMode): Extension {
   ]
 }
 
+function toCmKey(binding: string | null): string | null {
+  if (binding === null) return null
+  const parts = binding.split('+')
+  const base = parts.pop() ?? ''
+  const mods = parts.join('-')
+  const baseOut = base.length === 1 ? base.toLowerCase() : base
+  return mods ? `${mods}-${baseOut}` : baseOut
+}
+
+/** Keep the companion-note editor on the same configurable bindings as the
+ * main editor. Built behind a compartment so Settings changes apply live. */
+function buildPinnedEditorKeymap(
+  vimMode: boolean,
+  overrides: KeymapOverrides
+): Extension {
+  const configuredBindings: KeyBinding[] = []
+  const nonVimSearchKey = !vimMode
+    ? toCmKey(getKeymapBinding(overrides, 'global.searchNotesNonVim'))
+    : null
+  if (nonVimSearchKey) {
+    configuredBindings.push({
+      key: nonVimSearchKey,
+      run: () => {
+        useStore.getState().setSearchOpen(true)
+        return true
+      }
+    })
+  }
+
+  const moveLineUpKey = toCmKey(getKeymapBinding(overrides, 'editor.moveLineUp'))
+  const moveLineDownKey = toCmKey(getKeymapBinding(overrides, 'editor.moveLineDown'))
+  if (moveLineUpKey) configuredBindings.push({ key: moveLineUpKey, run: moveLineUp })
+  if (moveLineDownKey) configuredBindings.push({ key: moveLineDownKey, run: moveLineDown })
+
+  const baseKeymap = vimAwareDefaultKeymap(vimMode).filter(
+    (binding) => binding.key !== 'Alt-ArrowUp' && binding.key !== 'Alt-ArrowDown'
+  )
+  const editorSearchKeymap = searchKeymap.filter((binding) => binding.key !== 'Mod-f')
+
+  return keymap.of([
+    ...configuredBindings,
+    indentWithTab,
+    ...baseKeymap,
+    ...historyKeymap,
+    ...editorSearchKeymap,
+    ...completionKeymap
+  ])
+}
+
 export function PinnedReferencePane(): JSX.Element | null {
   const globalRefPath = useStore((s) => s.pinnedRefPath)
   const globalRefKind = useStore((s) => s.pinnedRefKind)
@@ -145,6 +202,7 @@ export function PinnedReferencePane(): JSX.Element | null {
   const updateNoteBody = useStore((s) => s.updateNoteBody)
   const persistNote = useStore((s) => s.persistNote)
   const vimMode = useStore((s) => s.vimMode)
+  const keymapOverrides = useStore((s) => s.keymapOverrides)
   const livePreview = useStore((s) => s.livePreview)
   const lineNumberMode = useStore((s) => s.lineNumberMode)
   const editorFontSize = useStore((s) => s.editorFontSize)
@@ -155,6 +213,7 @@ export function PinnedReferencePane(): JSX.Element | null {
   const viewRef = useRef<EditorView | null>(null)
   const viewPathRef = useRef<string | null>(null)
   const vimCompartmentRef = useRef<Compartment | null>(null)
+  const keymapCompartmentRef = useRef<Compartment | null>(null)
   const livePreviewCompartmentRef = useRef<Compartment | null>(null)
   const lineNumbersCompartmentRef = useRef<Compartment | null>(null)
 
@@ -171,9 +230,11 @@ export function PinnedReferencePane(): JSX.Element | null {
       }
       if (viewRef.current) return
       const vimCompartment = new Compartment()
+      const keymapCompartment = new Compartment()
       const livePreviewCompartment = new Compartment()
       const lineNumbersCompartment = new Compartment()
       vimCompartmentRef.current = vimCompartment
+      keymapCompartmentRef.current = keymapCompartment
       livePreviewCompartmentRef.current = livePreviewCompartment
       lineNumbersCompartmentRef.current = lineNumbersCompartment
       const s0 = useStore.getState()
@@ -206,22 +267,7 @@ export function PinnedReferencePane(): JSX.Element | null {
                 : 'slash-cmd-option'
           }),
           completionNavKeymap,
-          keymap.of([
-            {
-              key: 'Mod-f',
-              run: () => {
-                const state = useStore.getState()
-                if (state.vimMode) return false
-                state.setSearchOpen(true)
-                return true
-              }
-            },
-            indentWithTab,
-            ...vimAwareDefaultKeymap(s0.vimMode),
-            ...historyKeymap,
-            ...searchKeymap,
-            ...completionKeymap
-          ]),
+          keymapCompartment.of(buildPinnedEditorKeymap(s0.vimMode, s0.keymapOverrides)),
           EditorView.updateListener.of((upd) => {
             if (!upd.docChanged) return
             if (upd.transactions.some((tr: Transaction) => tr.annotation(programmatic))) return
@@ -265,6 +311,12 @@ export function PinnedReferencePane(): JSX.Element | null {
     if (!view || !comp) return
     view.dispatch({ effects: comp.reconfigure(vimMode ? vim() : []) })
   }, [vimMode])
+  useEffect(() => {
+    const view = viewRef.current
+    const comp = keymapCompartmentRef.current
+    if (!view || !comp) return
+    view.dispatch({ effects: comp.reconfigure(buildPinnedEditorKeymap(vimMode, keymapOverrides)) })
+  }, [keymapOverrides, vimMode])
   useEffect(() => {
     const view = viewRef.current
     const comp = livePreviewCompartmentRef.current

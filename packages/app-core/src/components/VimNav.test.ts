@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => {
     bufferPaletteOpen: false,
     commandPaletteOpen: false,
     editorViewRef: null as EditorView | null,
-    keymapOverrides: {},
+    keymapOverrides: {} as Record<string, string | null>,
     searchOpen: false,
     settingsOpen: false,
     vaultTextSearchOpen: false,
@@ -50,6 +50,7 @@ describe('VimNav note-history precedence', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks()
+    mocks.state.keymapOverrides = {}
     ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     Object.defineProperty(window, 'zen', {
       configurable: true,
@@ -102,5 +103,21 @@ describe('VimNav note-history precedence', () => {
     expect(mocks.jumpToNextNote).toHaveBeenCalledOnce()
     expect(mocks.jumpToPreviousNote).not.toHaveBeenCalled()
     expect(view.state.doc.toString()).toBe('hello')
+  })
+
+  it('does not route Ctrl+I when forward history is explicitly unbound', () => {
+    mocks.state.keymapOverrides = { 'vim.historyForward': null }
+    const event = new KeyboardEvent('keydown', {
+      key: 'i',
+      code: 'KeyI',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(mocks.jumpToNextNote).not.toHaveBeenCalled()
+    expect(mocks.jumpToPreviousNote).not.toHaveBeenCalled()
   })
 })

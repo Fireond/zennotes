@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   findKeymapConflict,
   getDefaultKeymapBinding,
+  getKeymapBinding,
   getKeymapDefinition,
+  getKeymapDisplay,
+  getSequenceTokens,
+  matchesShortcut,
+  normalizeKeymapOverrides,
   shortcutBindingFromEvent,
   sequenceTokenFromEvent
 } from './keymaps'
@@ -231,6 +236,11 @@ describe('findKeymapConflict (#298 — global shortcut conflicts)', () => {
     expect(findKeymapConflict(overrides, 'global.commandPalette', 'Mod+P')).toBeNull()
   })
 
+  it('frees a default shortcut when its owner is explicitly unbound', () => {
+    const overrides = { 'global.searchNotes': null }
+    expect(findKeymapConflict(overrides, 'global.commandPalette', 'Mod+P')).toBeNull()
+  })
+
   it('detects conflicts created by an override', () => {
     const overrides = { 'global.toggleSidebar': 'Mod+2' }
     // Mod+2 is global.toggleConnections by default.
@@ -251,5 +261,46 @@ describe('findKeymapConflict (#298 — global shortcut conflicts)', () => {
     expect(findKeymapConflict({}, 'nav.moveRight', 'l')).toBeNull()
     // Even a genuine cross-action duplicate in a sequence group is allowed.
     expect(findKeymapConflict({}, 'nav.delete', 'x')).toBeNull()
+  })
+})
+
+describe('explicitly unbound keymaps', () => {
+  it('distinguishes an absent override from an explicit null', () => {
+    expect(getKeymapBinding({}, 'global.searchNotes')).toBe(
+      getDefaultKeymapBinding('global.searchNotes')
+    )
+    expect(getKeymapBinding({ 'global.searchNotes': null }, 'global.searchNotes')).toBeNull()
+    expect(getKeymapDisplay({ 'global.searchNotes': null }, 'global.searchNotes')).toBe('Unbound')
+  })
+
+  it('normalizes JSON null and portable-config empty strings as unbound', () => {
+    expect(
+      normalizeKeymapOverrides({
+        'global.searchNotes': null,
+        'global.commandPalette': '',
+        'global.toggleSidebar': 'Mod+9'
+      })
+    ).toEqual({
+      'global.searchNotes': null,
+      'global.commandPalette': null,
+      'global.toggleSidebar': 'Mod+9'
+    })
+  })
+
+  it('produces no sequence tokens and never matches an unbound shortcut', () => {
+    const overrides = {
+      'vim.leaderPrefix': null,
+      'global.searchNotes': null
+    }
+    expect(getSequenceTokens(overrides, 'vim.leaderPrefix')).toEqual([])
+    withPlatform('linux', () => {
+      expect(
+        matchesShortcut(
+          fakeEvent({ key: 'p', code: 'KeyP', ctrlKey: true }),
+          overrides,
+          'global.searchNotes'
+        )
+      ).toBe(false)
+    })
   })
 })

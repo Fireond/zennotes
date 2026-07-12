@@ -15,7 +15,7 @@ import { findLeaf } from './pane-layout'
 import { requestPaneMode } from './pane-mode'
 import { resolveQuickNoteTitle } from './quick-note-title'
 import { forwardTaskWithPicker, taskAtEditorCursor } from './forward-task'
-import { getKeymapDisplay, type KeymapId } from './keymaps'
+import { getKeymapBinding, getKeymapDisplay, type KeymapId } from './keymaps'
 import { dispatchKeyboardContextMenu, findTabContextMenuTarget } from './keyboard-context-menu'
 import { resolveSystemFolderLabels } from './system-folder-labels'
 import { normalizeVaultSettings } from './vault-layout'
@@ -59,16 +59,24 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
   const labels = () => resolveSystemFolderLabels(getState().systemFolderLabels)
   const pathLabel = (): string =>
     getState().workspaceMode === 'remote' ? 'Server Path' : 'Absolute Path'
-  const shortcut = (id: KeymapId): string => getKeymapDisplay(getState().keymapOverrides, id)
-  const leaderShortcut = (id: KeymapId): string =>
-    `${shortcut('vim.leaderPrefix')} ${shortcut(id)}`
-  const paneShortcut = (id: KeymapId): string =>
-    `${shortcut('vim.panePrefix')} ${shortcut(id)}`
-  const searchShortcut = (): string => {
+  const shortcut = (id: KeymapId): string | undefined => {
+    const overrides = getState().keymapOverrides
+    return getKeymapBinding(overrides, id) === null ? undefined : getKeymapDisplay(overrides, id)
+  }
+  const joinedShortcut = (...parts: Array<string | undefined>): string | undefined =>
+    parts.every(Boolean) ? (parts as string[]).join(' ') : undefined
+  const leaderShortcut = (id: KeymapId): string | undefined =>
+    joinedShortcut(shortcut('vim.leaderPrefix'), shortcut(id))
+  const paneShortcut = (id: KeymapId): string | undefined =>
+    joinedShortcut(shortcut('vim.panePrefix'), shortcut(id))
+  const searchShortcut = (): string | undefined => {
     const state = getState()
     const primary = shortcut('global.searchNotes')
     if (state.vimMode) return primary
-    return `${primary} / ${shortcut('global.searchNotesNonVim')}`
+    const bindings = [primary, shortcut('global.searchNotesNonVim')].filter(
+      (binding): binding is string => !!binding
+    )
+    return bindings.length > 0 ? bindings.join(' / ') : undefined
   }
   const openExternal = (url: string): void => {
     window.open(url, '_blank')
@@ -893,7 +901,13 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       id: 'nav.search-text',
       title: 'Search Text in Vault…',
       category: 'Go',
-      shortcut: getState().vimMode ? leaderShortcut('vim.leaderSearchVaultText') : undefined,
+      shortcut: getState().vimMode
+        ? joinedShortcut(
+            shortcut('vim.leaderPrefix'),
+            shortcut('vim.leaderSearchGroup'),
+            shortcut('vim.leaderSearchVaultText')
+          )
+        : undefined,
       keywords: 'grep live grep telescope fuzzy content body line text vault',
       run: () => {
         const s = getState()

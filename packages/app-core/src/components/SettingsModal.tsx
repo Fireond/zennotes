@@ -412,6 +412,7 @@ export function SettingsModal(): JSX.Element {
   const setVimYankToClipboard = useStore((s) => s.setVimYankToClipboard);
   const keymapOverrides = useStore((s) => s.keymapOverrides);
   const setKeymapBinding = useStore((s) => s.setKeymapBinding);
+  const resetKeymapBinding = useStore((s) => s.resetKeymapBinding);
   const resetAllKeymaps = useStore((s) => s.resetAllKeymaps);
   const whichKeyHints = useStore((s) => s.whichKeyHints);
   const setWhichKeyHints = useStore((s) => s.setWhichKeyHints);
@@ -2184,6 +2185,7 @@ export function SettingsModal(): JSX.Element {
             vimMode={vimMode}
             overrides={keymapOverrides}
             onSetBinding={(id, binding) => setKeymapBinding(id, binding)}
+            onResetBinding={(id) => resetKeymapBinding(id)}
             onResetAll={resetAllKeymaps}
           />
         </div>
@@ -4466,11 +4468,13 @@ function KeymapSettings({
   vimMode,
   overrides,
   onSetBinding,
+  onResetBinding,
   onResetAll,
 }: {
   vimMode: boolean;
   overrides: KeymapOverrides;
   onSetBinding: (id: KeymapId, binding: string | null) => void;
+  onResetBinding: (id: KeymapId) => void;
   onResetAll: () => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
@@ -4541,7 +4545,7 @@ function KeymapSettings({
                     : "cursor-not-allowed border-paper-300/60 bg-paper-100/45 text-ink-400",
                 ].join(" ")}
               >
-                Reset all
+                Restore all defaults
               </button>
             </div>
           </div>
@@ -4556,7 +4560,12 @@ function KeymapSettings({
               <div className="pb-4">
                 {group.items.map((definition) => {
                   const current = getKeymapBinding(overrides, definition.id);
-                  const custom = !!overrides[definition.id];
+                  const hasOverride = Object.prototype.hasOwnProperty.call(
+                    overrides,
+                    definition.id,
+                  );
+                  const unbound = overrides[definition.id] === null;
+                  const custom = hasOverride && !unbound;
                   const conflict = findKeymapConflict(
                     overrides,
                     definition.id,
@@ -4568,6 +4577,7 @@ function KeymapSettings({
                   return (
                     <div
                       key={definition.id}
+                      data-keymap-id={definition.id}
                       className="flex items-center justify-between gap-4 px-5 py-4"
                     >
                       <div className="min-w-0">
@@ -4585,6 +4595,11 @@ function KeymapSettings({
                               Custom
                             </span>
                           )}
+                          {unbound && (
+                            <span className="rounded-full border border-paper-300/70 bg-paper-100/85 px-2 py-0.5 text-2xs font-medium uppercase tracking-[0.14em] text-ink-500">
+                              Unbound
+                            </span>
+                          )}
                           {conflict && (
                             <span
                               className="rounded-full border border-danger/35 bg-danger/10 px-2 py-0.5 text-2xs font-medium uppercase tracking-[0.14em] text-danger"
@@ -4600,7 +4615,9 @@ function KeymapSettings({
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <span className="rounded-xl border border-paper-300/70 bg-paper-100/85 px-3 py-1.5 text-xs font-medium text-ink-900">
-                          {formatKeymapBinding(current, definition.kind)}
+                          {current === null
+                            ? "Unbound"
+                            : formatKeymapBinding(current, definition.kind)}
                         </span>
                         <button
                           type="button"
@@ -4611,16 +4628,16 @@ function KeymapSettings({
                         </button>
                         <button
                           type="button"
-                          disabled={!custom}
-                          onClick={() => onSetBinding(definition.id, null)}
+                          disabled={!hasOverride}
+                          onClick={() => onResetBinding(definition.id)}
                           className={[
                             "rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors",
-                            custom
+                            hasOverride
                               ? "border-paper-300/70 bg-paper-100/80 text-ink-700 hover:bg-paper-200"
                               : "cursor-not-allowed border-paper-300/60 bg-paper-100/45 text-ink-400",
                           ].join(" ")}
                         >
-                          Reset
+                          Restore default
                         </button>
                       </div>
                     </div>
@@ -4644,10 +4661,11 @@ function KeymapSettings({
           currentBinding={getKeymapBinding(overrides, recording.id)}
           onClose={() => setRecording(null)}
           onSave={(binding) => {
-            onSetBinding(
-              recording.id,
-              binding === recording.defaultBinding ? null : binding,
-            );
+            if (binding === recording.defaultBinding) {
+              onResetBinding(recording.id);
+            } else {
+              onSetBinding(recording.id, binding);
+            }
             setRecording(null);
           }}
         />
@@ -4665,9 +4683,9 @@ function KeymapRecorderModal({
 }: {
   definition: KeymapDefinition;
   overrides: KeymapOverrides;
-  currentBinding: string;
+  currentBinding: string | null;
   onClose: () => void;
-  onSave: (binding: string) => void;
+  onSave: (binding: string | null) => void;
 }): JSX.Element {
   const [binding, setBinding] = useState(currentBinding);
   const mac = isMacPlatform();
@@ -4689,13 +4707,13 @@ function KeymapRecorderModal({
         event.preventDefault();
         event.stopPropagation();
         if (definition.kind === "shortcut") {
-          setBinding("");
+          setBinding(null);
           return;
         }
         setBinding((current) => {
-          const tokens = current.split(/\s+/).filter(Boolean);
+          const tokens = (current ?? "").split(/\s+/).filter(Boolean);
           tokens.pop();
-          return tokens.join(" ");
+          return tokens.length > 0 ? tokens.join(" ") : null;
         });
         return;
       }
@@ -4716,7 +4734,7 @@ function KeymapRecorderModal({
 
       setBinding((current) => {
         const limit = definition.maxTokens ?? 2;
-        const tokens = current.split(/\s+/).filter(Boolean);
+        const tokens = (current ?? "").split(/\s+/).filter(Boolean);
         if (limit <= 1) return next;
         if (tokens.length >= limit) return next;
         return [...tokens, next].join(" ");
@@ -4727,9 +4745,8 @@ function KeymapRecorderModal({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [definition]);
 
-  const display = binding
-    ? formatKeymapBinding(binding, definition.kind)
-    : "Press a key…";
+  const display =
+    binding === null ? "Unbound" : formatKeymapBinding(binding, definition.kind);
 
   return createPortal(
     <div className="fixed inset-0 z-toast flex items-center justify-center bg-black/35 px-4 backdrop-blur-sm">
@@ -4768,7 +4785,10 @@ function KeymapRecorderModal({
             </div>
           )}
           <div className="mt-3 text-xs text-ink-500">
-            Current: {formatKeymapBinding(currentBinding, definition.kind)}
+            Current:{" "}
+            {currentBinding === null
+              ? "Unbound"
+              : formatKeymapBinding(currentBinding, definition.kind)}
           </div>
           <div className="mt-1 text-xs text-ink-500">
             Default:{" "}
@@ -4778,10 +4798,16 @@ function KeymapRecorderModal({
         <div className="flex items-center justify-between gap-3 border-t border-paper-300/60 px-5 py-3">
           <button
             type="button"
-            onClick={() => setBinding("")}
-            className="rounded-md border border-paper-300 bg-paper-100 px-3 py-1.5 text-xs font-medium text-ink-700 transition-colors hover:bg-paper-200"
+            disabled={binding === null}
+            onClick={() => setBinding(null)}
+            className={[
+              "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+              binding === null
+                ? "cursor-not-allowed border-paper-300/60 bg-paper-100/45 text-ink-400"
+                : "border-paper-300 bg-paper-100 text-ink-700 hover:bg-paper-200",
+            ].join(" ")}
           >
-            Clear
+            Unbind
           </button>
           <div className="flex items-center gap-2">
             <button
@@ -4794,10 +4820,10 @@ function KeymapRecorderModal({
             <Button
               variant="primary"
               size="sm"
-              disabled={!binding || !!conflict}
+              disabled={!!conflict}
               onClick={() => onSave(binding)}
             >
-              Save
+              {binding === null ? "Save unbound" : "Save"}
             </Button>
           </div>
         </div>

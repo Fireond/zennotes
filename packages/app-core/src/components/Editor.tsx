@@ -39,6 +39,7 @@ import { EditorPane } from './EditorPane'
 import { focusPaneInDirection, focusPaneOrEdgePanel } from '../lib/pane-nav'
 import { requestPaneMode } from '../lib/pane-mode'
 import {
+  getDefaultKeymapBinding,
   getKeymapBinding,
   getSequenceTokens,
   type KeymapId,
@@ -54,6 +55,10 @@ let syncedVimBindings: Partial<Record<KeymapId, string[]>> = {}
 
 const DEFAULT_VIM_MAPPINGS_TO_CLEAR = [
   'gd',
+  '<C-d>',
+  '<C-u>',
+  '<C-i>',
+  '<C-o>',
   '<C-w>h',
   '<C-w>j',
   '<C-w>k',
@@ -76,6 +81,24 @@ function clearKnownVimMappings(): void {
       /* ignore */
     }
   }
+}
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    // The Vim map table lives in the dependency singleton and survives this
+    // module's HMR lifetime. Remove every binding owned by this generation so
+    // stale custom mappings cannot reappear after an edit during development.
+    for (const bindings of Object.values(syncedVimBindings)) {
+      for (const binding of bindings ?? []) {
+        try {
+          Vim.unmap(binding, 'normal')
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    syncedVimBindings = {}
+  })
 }
 
 function toVimKeyName(base: string): string {
@@ -116,7 +139,8 @@ function toVimSequenceToken(token: string): string | null {
   return `<${[...modifiers, normalizedKey].join('-')}>`
 }
 
-function toVimSequence(binding: string): string | null {
+function toVimSequence(binding: string | null): string | null {
+  if (binding === null) return null
   const tokens = binding
     .split(/\s+/)
     .map((token) => token.trim())
@@ -174,7 +198,12 @@ function editorHalfPage(view: EditorView | undefined, forward: boolean): void {
 }
 
 function syncVimKeymaps(overrides: KeymapOverrides): void {
-  const mappings: Array<{ id: KeymapId; action: string; bindings: string[] }> = [
+  const mappings: Array<{
+    id: KeymapId
+    action: string
+    bindings: string[]
+    defaultBindings?: string[]
+  }> = [
     {
       id: 'vim.goToDefinition',
       action: 'goToDefinition',
@@ -185,22 +214,26 @@ function syncVimKeymaps(overrides: KeymapOverrides): void {
     {
       id: 'vim.paneFocusLeft',
       action: 'focusPaneLeft',
-      bindings: paneMapBindings(overrides, 'vim.paneFocusLeft')
+      bindings: paneMapBindings(overrides, 'vim.paneFocusLeft'),
+      defaultBindings: paneMapBindings({}, 'vim.paneFocusLeft')
     },
     {
       id: 'vim.paneFocusDown',
       action: 'focusPaneDown',
-      bindings: paneMapBindings(overrides, 'vim.paneFocusDown')
+      bindings: paneMapBindings(overrides, 'vim.paneFocusDown'),
+      defaultBindings: paneMapBindings({}, 'vim.paneFocusDown')
     },
     {
       id: 'vim.paneFocusUp',
       action: 'focusPaneUp',
-      bindings: paneMapBindings(overrides, 'vim.paneFocusUp')
+      bindings: paneMapBindings(overrides, 'vim.paneFocusUp'),
+      defaultBindings: paneMapBindings({}, 'vim.paneFocusUp')
     },
     {
       id: 'vim.paneFocusRight',
       action: 'focusPaneRight',
-      bindings: paneMapBindings(overrides, 'vim.paneFocusRight')
+      bindings: paneMapBindings(overrides, 'vim.paneFocusRight'),
+      defaultBindings: paneMapBindings({}, 'vim.paneFocusRight')
     },
     {
       id: 'vim.bufferPrevious',
@@ -271,9 +304,28 @@ function syncVimKeymaps(overrides: KeymapOverrides): void {
       bindings: [toVimSequence(getKeymapBinding(overrides, 'nav.halfPageUp'))].filter(
         (binding): binding is string => !!binding
       )
-    }
+    },
+    // These routes are normally captured by VimNav. When explicitly unbound,
+    // shadow CodeMirror-Vim's same-key built-ins so the default doesn't leak
+    // back through after the app-level binding is removed.
+    { id: 'vim.historyBack', action: 'zenNoop', bindings: [] },
+    { id: 'vim.historyForward', action: 'zenNoop', bindings: [] },
+    { id: 'vim.panePrefix', action: 'zenNoop', bindings: [] }
   ]
 
+  const resolvedMappings = mappings.map((mapping) => {
+    const explicitlyUnbound = overrides[mapping.id] === null
+    const defaultBinding = toVimSequence(getDefaultKeymapBinding(mapping.id))
+    const bindings = explicitlyUnbound
+      ? (mapping.defaultBindings ?? (defaultBinding ? [defaultBinding] : []))
+      : mapping.bindings
+    const action = explicitlyUnbound ? 'zenNoop' : mapping.action
+    return { ...mapping, action, bindings }
+  })
+
+  // Remove the previous generation first. A binding may have moved from one
+  // action to another, so interleaving unmap/map calls can otherwise delete a
+  // mapping that was just installed for its new owner.
   for (const mapping of mappings) {
     for (const binding of syncedVimBindings[mapping.id] ?? []) {
       try {
@@ -282,11 +334,23 @@ function syncVimKeymaps(overrides: KeymapOverrides): void {
         /* ignore */
       }
     }
+  }
+
+  // Unbound defaults need a no-op shadow when CodeMirror-Vim owns the same
+  // key. Install those first so a different action explicitly remapped onto
+  // that key is installed last and remains the winner.
+  const installMappings = [
+    ...resolvedMappings.filter((mapping) => mapping.action === 'zenNoop'),
+    ...resolvedMappings.filter((mapping) => mapping.action !== 'zenNoop')
+  ]
+  for (const mapping of installMappings) {
     for (const binding of mapping.bindings) {
       Vim.mapCommand(binding, 'action', mapping.action, {}, { context: 'normal' })
     }
-    syncedVimBindings[mapping.id] = mapping.bindings
   }
+  syncedVimBindings = Object.fromEntries(
+    resolvedMappings.map((mapping) => [mapping.id, mapping.bindings])
+  ) as Partial<Record<KeymapId, string[]>>
 }
 
 // `extractLinkAtCursor` lives in ../lib/internal-links so the editor, the
@@ -339,6 +403,7 @@ function registerVimCommands(): void {
     /* ignore */
   }
   clearKnownVimMappings()
+  Vim.defineAction('zenNoop', () => {})
 
   // Visual-line reorder: select line(s) with Shift+V, then Shift+J / Shift+K
   // move the selection down / up — the well-known Vim "move selected lines"

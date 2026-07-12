@@ -100,7 +100,8 @@ export type KeymapId =
   | "editor.moveLineUp"
   | "editor.moveLineDown";
 
-export type KeymapOverrides = Partial<Record<KeymapId, string>>;
+/** Missing means "use the default"; null is an explicit unbound action. */
+export type KeymapOverrides = Partial<Record<KeymapId, string | null>>;
 
 export interface KeymapDefinition {
   id: KeymapId;
@@ -1076,16 +1077,18 @@ export function getDefaultKeymapBinding(id: KeymapId): string {
 export function getKeymapBinding(
   overrides: KeymapOverrides | null | undefined,
   id: KeymapId,
-): string {
+): string | null {
   const override = overrides?.[id];
-  return override || getDefaultKeymapBinding(id);
+  return override === undefined ? getDefaultKeymapBinding(id) : override;
 }
 
 export function getSequenceTokens(
   overrides: KeymapOverrides | null | undefined,
   id: KeymapId,
 ): string[] {
-  return getKeymapBinding(overrides, id)
+  const binding = getKeymapBinding(overrides, id);
+  if (binding === null) return [];
+  return binding
     .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean);
@@ -1348,8 +1351,9 @@ export function normalizeKeymapBinding(
 export function findKeymapConflict(
   overrides: KeymapOverrides | null | undefined,
   id: KeymapId,
-  binding: string,
+  binding: string | null,
 ): KeymapDefinition | null {
+  if (binding === null) return null;
   const definition = getKeymapDefinition(id);
   if (definition.scope !== "app") return null;
   const normalized = normalizeKeymapBinding(id, binding);
@@ -1366,6 +1370,12 @@ export function normalizeKeymapOverrides(input: unknown): KeymapOverrides {
   const overrides: KeymapOverrides = {};
   for (const definition of KEYMAP_DEFINITIONS) {
     const raw = (input as Record<string, unknown>)[definition.id];
+    // JSON stores explicit unbinding as null. The portable TOML config uses an
+    // empty string because TOML has no null value.
+    if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+      overrides[definition.id] = null;
+      continue;
+    }
     if (typeof raw !== "string") continue;
     const normalized = normalizeKeymapBinding(definition.id, raw);
     if (normalized && normalized !== definition.defaultBinding) {
@@ -1415,8 +1425,9 @@ export function sequenceTokenFromEvent(event: KeyboardEvent): string | null {
 
 export function matchesShortcutBinding(
   event: KeyboardEvent,
-  binding: string,
+  binding: string | null,
 ): boolean {
+  if (binding === null) return false;
   const normalized = shortcutBindingFromEvent(event);
   return !!normalized && normalized === binding;
 }
@@ -1480,7 +1491,8 @@ export function getKeymapDisplay(
   id: KeymapId,
 ): string {
   const definition = getKeymapDefinition(id);
-  return formatKeymapBinding(getKeymapBinding(overrides, id), definition.kind);
+  const binding = getKeymapBinding(overrides, id);
+  return binding === null ? "Unbound" : formatKeymapBinding(binding, definition.kind);
 }
 
 export function describeCurrentBinding(
@@ -1507,13 +1519,14 @@ export function getKeymapDefinitionsByGroup(): Array<{
 
 export function advanceSequence(
   event: KeyboardEvent,
-  binding: string,
+  binding: string | null,
   pendingRef: { current: number },
   timerRef: { current?: ReturnType<typeof setTimeout> },
   onMatch: () => void,
   consume: () => void,
   timeoutMs = 500,
 ): boolean {
+  if (binding === null) return false;
   const tokens = binding
     .split(/\s+/)
     .map((token) => token.trim())

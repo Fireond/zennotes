@@ -30,12 +30,21 @@ function shortcut(overrides: KeymapOverrides, id: KeymapId): string {
   return getKeymapDisplay(overrides, id)
 }
 
+function shortcutSequence(...bindings: string[]): string {
+  return bindings.includes('Unbound') ? 'Unbound' : bindings.join(' ')
+}
+
+function shortcutAlternatives(...bindings: string[]): string {
+  const active = bindings.filter((binding) => binding !== 'Unbound')
+  return active.length > 0 ? active.join(' / ') : 'Unbound'
+}
+
 function leaderShortcut(overrides: KeymapOverrides, id: KeymapId): string {
-  return `${shortcut(overrides, 'vim.leaderPrefix')} ${shortcut(overrides, id)}`
+  return shortcutSequence(shortcut(overrides, 'vim.leaderPrefix'), shortcut(overrides, id))
 }
 
 function paneShortcut(overrides: KeymapOverrides, id: KeymapId): string {
-  return `${shortcut(overrides, 'vim.panePrefix')} ${shortcut(overrides, id)}`
+  return shortcutSequence(shortcut(overrides, 'vim.panePrefix'), shortcut(overrides, id))
 }
 
 function resolveShortcutKeys(
@@ -62,30 +71,42 @@ function resolveShortcutKeys(
 
   if (sectionId === 'panel-motion') {
     if (action === 'Move focus') {
-      return [
+      return shortcutAlternatives(
         paneShortcut(overrides, 'vim.paneFocusLeft'),
         paneShortcut(overrides, 'vim.paneFocusDown'),
         paneShortcut(overrides, 'vim.paneFocusUp'),
         paneShortcut(overrides, 'vim.paneFocusRight')
-      ].join(' / ')
+      )
     }
     if (action === 'Split right') return paneShortcut(overrides, 'vim.paneSplitRight')
     if (action === 'Split down') return paneShortcut(overrides, 'vim.paneSplitDown')
     if (action === 'Open buffers') return leaderShortcut(overrides, 'vim.leaderOpenBuffers')
     if (action === 'Search notes') return leaderShortcut(overrides, 'vim.leaderSearchNotes')
     if (action === 'Search vault text') {
-      return `${leaderShortcut(overrides, 'vim.leaderSearchGroup')} ${shortcut(overrides, 'vim.leaderSearchVaultText')}`
+      return shortcutSequence(
+        leaderShortcut(overrides, 'vim.leaderSearchGroup'),
+        shortcut(overrides, 'vim.leaderSearchVaultText')
+      )
     }
     if (action === 'Toggle left sidebar') return leaderShortcut(overrides, 'vim.leaderToggleSidebar')
     if (action === 'Note outline') return leaderShortcut(overrides, 'vim.leaderNoteOutline')
     if (action === 'Switch vault') return leaderShortcut(overrides, 'vim.leaderSwitchVault')
-    if (action === 'Show leader hints') return `${shortcut(overrides, 'vim.leaderPrefix')}, then pause`
+    if (action === 'Show leader hints') {
+      const leader = shortcut(overrides, 'vim.leaderPrefix')
+      return leader === 'Unbound' ? leader : `${leader}, then pause`
+    }
     if (action === 'Toggle outline panel') return shortcut(overrides, 'global.toggleOutlinePanel')
     if (action === 'Fold / unfold heading') {
-      return `${shortcut(overrides, 'vim.foldCurrent')} / ${shortcut(overrides, 'vim.unfoldCurrent')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'vim.foldCurrent'),
+        shortcut(overrides, 'vim.unfoldCurrent')
+      )
     }
     if (action === 'Fold / unfold all') {
-      return `${shortcut(overrides, 'vim.foldAll')} / ${shortcut(overrides, 'vim.unfoldAll')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'vim.foldAll'),
+        shortcut(overrides, 'vim.unfoldAll')
+      )
     }
     if (action === 'Go back') return shortcut(overrides, 'vim.historyBack')
     if (action === 'Go forward') return shortcut(overrides, 'vim.historyForward')
@@ -94,12 +115,20 @@ function resolveShortcutKeys(
 
   if (sectionId === 'lists-and-sidebar') {
     if (action === 'Move selection') {
-      return `${shortcut(overrides, 'nav.moveDown')} / ${shortcut(overrides, 'nav.moveUp')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'nav.moveDown'),
+        shortcut(overrides, 'nav.moveUp')
+      )
     }
     if (action === 'Jump to top or bottom') {
-      return `${shortcut(overrides, 'nav.jumpTop')} / ${shortcut(overrides, 'nav.jumpBottom')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'nav.jumpTop'),
+        shortcut(overrides, 'nav.jumpBottom')
+      )
     }
-    if (action === 'Open item') return `Enter / ${shortcut(overrides, 'nav.openSideItem')}`
+    if (action === 'Open item') {
+      return shortcutAlternatives('Enter', shortcut(overrides, 'nav.openSideItem'))
+    }
     if (action === 'Collapse or move left') return shortcut(overrides, 'nav.back')
     if (action === 'Toggle folder') return shortcut(overrides, 'nav.toggleFolder')
     if (action === 'Search notes') return shortcut(overrides, 'nav.filter')
@@ -108,17 +137,26 @@ function resolveShortcutKeys(
 
   if (sectionId === 'preview-and-connections') {
     if (action === 'Scroll preview') {
-      return `${shortcut(overrides, 'nav.moveDown')} / ${shortcut(overrides, 'nav.moveUp')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'nav.moveDown'),
+        shortcut(overrides, 'nav.moveUp')
+      )
     }
     if (action === 'Half-page scroll') {
-      return `${shortcut(overrides, 'nav.halfPageDown')} / ${shortcut(overrides, 'nav.halfPageUp')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'nav.halfPageDown'),
+        shortcut(overrides, 'nav.halfPageUp')
+      )
     }
     if (action === 'Jump to top or bottom') {
-      return `${shortcut(overrides, 'nav.jumpTop')} / ${shortcut(overrides, 'nav.jumpBottom')}`
+      return shortcutAlternatives(
+        shortcut(overrides, 'nav.jumpTop'),
+        shortcut(overrides, 'nav.jumpBottom')
+      )
     }
     if (action === 'Search notes') return shortcut(overrides, 'nav.filter')
     if (action === 'Peek backlink') return shortcut(overrides, 'nav.peekPreview')
-    if (action === 'Back out') return `${shortcut(overrides, 'nav.back')} / Esc`
+    if (action === 'Back out') return shortcutAlternatives(shortcut(overrides, 'nav.back'), 'Esc')
   }
 
   return null
@@ -127,15 +165,22 @@ function resolveShortcutKeys(
 function resolveVimCommandLabel(command: string, overrides: KeymapOverrides): string {
   if (command === 'gd') return shortcut(overrides, 'vim.goToDefinition')
   if (command === '<Space> l f') {
-    return `${leaderShortcut(overrides, 'vim.leaderNoteActions')} ${shortcut(overrides, 'vim.leaderFormatNote')}`
+    return shortcutSequence(
+      leaderShortcut(overrides, 'vim.leaderNoteActions'),
+      shortcut(overrides, 'vim.leaderFormatNote')
+    )
   }
   if (command === '<Space> (pause)') {
-    return `${shortcut(overrides, 'vim.leaderPrefix')} (pause)`
+    const leader = shortcut(overrides, 'vim.leaderPrefix')
+    return leader === 'Unbound' ? leader : `${leader} (pause)`
   }
   if (command === '<Space> o') return leaderShortcut(overrides, 'vim.leaderOpenBuffers')
   if (command === '<Space> f') return leaderShortcut(overrides, 'vim.leaderSearchNotes')
   if (command === '<Space> s t') {
-    return `${leaderShortcut(overrides, 'vim.leaderSearchGroup')} ${shortcut(overrides, 'vim.leaderSearchVaultText')}`
+    return shortcutSequence(
+      leaderShortcut(overrides, 'vim.leaderSearchGroup'),
+      shortcut(overrides, 'vim.leaderSearchVaultText')
+    )
   }
   if (command === '<Space> e') return leaderShortcut(overrides, 'vim.leaderToggleSidebar')
   if (command === '<Space> p') return leaderShortcut(overrides, 'vim.leaderNoteOutline')

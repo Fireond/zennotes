@@ -188,7 +188,7 @@ export function VimNav(): JSX.Element | null {
         label: 'Toggle favorite',
         detail: 'Add or remove the active note from Favorites.'
       }
-      ]
+      ].filter((item) => item.keyLabel !== 'Unbound')
     }
     if (whichKeyState.stage === 'leader-s') {
       return [
@@ -197,7 +197,7 @@ export function VimNav(): JSX.Element | null {
           label: 'Search vault text',
           detail: 'Fuzzy-search note contents across the vault.'
         }
-      ]
+      ].filter((item) => item.keyLabel !== 'Unbound')
     }
 
     const items: WhichKeyItem[] = [
@@ -283,7 +283,7 @@ export function VimNav(): JSX.Element | null {
         detail: 'Open the note-local leader group. `f` formats the current note.'
       })
     }
-    return items
+    return items.filter((item) => item.keyLabel !== 'Unbound')
   })()
 
   useEffect(() => {
@@ -306,8 +306,8 @@ export function VimNav(): JSX.Element | null {
     const handler = (e: KeyboardEvent): void => {
       const state = useStore.getState()
       const overrides = state.keymapOverrides
-      const leaderToken = getSequenceTokens(overrides, 'vim.leaderPrefix')[0] ?? 'Space'
-      const panePrefixToken = getSequenceTokens(overrides, 'vim.panePrefix')[0] ?? 'Ctrl+W'
+      const leaderToken = getSequenceTokens(overrides, 'vim.leaderPrefix')[0]
+      const panePrefixToken = getSequenceTokens(overrides, 'vim.panePrefix')[0]
 
       // Skip when modals / overlays are open
       if (
@@ -1089,7 +1089,7 @@ export function VimNav(): JSX.Element | null {
     const onKeyUp = (e: KeyboardEvent): void => {
       if (excalidrawSpaceDownAt.current == null) return
       const leaderToken =
-        getSequenceTokens(useStore.getState().keymapOverrides, 'vim.leaderPrefix')[0] ?? 'Space'
+        getSequenceTokens(useStore.getState().keymapOverrides, 'vim.leaderPrefix')[0]
       if (sequenceTokenFromEvent(e) !== leaderToken) return
       const downAt = excalidrawSpaceDownAt.current
       excalidrawSpaceDownAt.current = null

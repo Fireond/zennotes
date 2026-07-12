@@ -472,10 +472,10 @@ export function serializeConfig(portable: AppConfigPortable): string {
  *  default binding as a commented, grouped reference so users can discover and
  *  uncomment what they want to remap. */
 function keymapSectionLines(rawOverrides: unknown): string[] {
-  const overrides: Record<string, string> = {}
+  const overrides: Record<string, string | null> = {}
   if (rawOverrides && typeof rawOverrides === 'object' && !Array.isArray(rawOverrides)) {
     for (const [key, value] of Object.entries(rawOverrides as Record<string, unknown>)) {
-      if (typeof value === 'string') overrides[key] = value
+      if (typeof value === 'string' || value === null) overrides[key] = value
     }
   }
 
@@ -484,11 +484,12 @@ function keymapSectionLines(rawOverrides: unknown): string[] {
     '# Keymap overrides. Add or uncomment "<action.id>" = "<binding>" lines.',
     '# Binding syntax: "Mod+P" = Cmd/Ctrl+P, "Shift+Mod+K", "Ctrl+W", "Space",',
     '# or a two-key sequence like "g g". Uncomment a reference line to remap it.',
+    '# Set an action to "" to leave it explicitly unbound.',
     '[keymaps]'
   ]
 
   for (const [key, value] of Object.entries(overrides)) {
-    lines.push(`${tomlKey(key)} = ${tomlValue(value)}`)
+    lines.push(`${tomlKey(key)} = ${tomlValue(value ?? '')}`)
   }
 
   lines.push('', '# --- All actions (defaults shown; uncomment + edit to override) ---')
@@ -531,7 +532,16 @@ export function deserializeConfig(text: string): { version: number; portable: Ap
     if (!def) continue
     const value = parsed[def.table]
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      portable[key as PortablePrefKey] = value
+      if (key === 'keymapOverrides') {
+        portable[key as PortablePrefKey] = Object.fromEntries(
+          Object.entries(value as Record<string, unknown>).map(([entryKey, entryValue]) => [
+            entryKey,
+            entryValue === '' ? null : entryValue
+          ])
+        )
+      } else {
+        portable[key as PortablePrefKey] = value
+      }
     }
   }
 

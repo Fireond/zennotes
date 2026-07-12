@@ -102,7 +102,10 @@ describe('TOML serialization', () => {
       ripgrepBinaryPath: null,
       interfaceFont: null,
       quickNoteTitlePrefix: 'Quick Note',
-      keymapOverrides: { 'global.searchNotes': 'Mod+P' },
+      keymapOverrides: {
+        'global.searchNotes': 'Mod+P',
+        'global.commandPalette': null
+      },
       kanbanColumnTitles: { 'status:todo': 'To Do' },
       systemFolderLabels: { inbox: 'In' }
     }
@@ -118,7 +121,11 @@ describe('TOML serialization', () => {
     expect(round.editorLineHeight).toBeCloseTo(1.6)
     expect(round.themeFamily).toBe('nord')
     expect(round.vaultTextSearchBackend).toBe('ripgrep')
-    expect(round.keymapOverrides).toEqual({ 'global.searchNotes': 'Mod+P' })
+    expect(text).toContain('"global.commandPalette" = ""')
+    expect(round.keymapOverrides).toEqual({
+      'global.searchNotes': 'Mod+P',
+      'global.commandPalette': null
+    })
     expect(round.kanbanColumnTitles).toEqual({ 'status:todo': 'To Do' })
     expect(round.systemFolderLabels).toEqual({ inbox: 'In' })
   })

@@ -590,6 +590,34 @@ describe('local vault shortcuts', () => {
   })
 })
 
+describe('keymap unbinding', () => {
+  it('stores null explicitly and restores the default by deleting the override', async () => {
+    installZen()
+    const { useStore } = await loadStore()
+
+    useStore.getState().setKeymapBinding('global.searchNotes', null)
+    expect(useStore.getState().keymapOverrides).toEqual({ 'global.searchNotes': null })
+
+    useStore.getState().resetKeymapBinding('global.searchNotes')
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        useStore.getState().keymapOverrides,
+        'global.searchNotes'
+      )
+    ).toBe(false)
+
+    useStore.getState().setKeymapBinding('global.searchNotes', 'Mod+Alt+P')
+    expect(useStore.getState().keymapOverrides['global.searchNotes']).toBe('Alt+Mod+P')
+    useStore.getState().setKeymapBinding('global.searchNotes', 'Mod+P')
+    expect(
+      Object.prototype.hasOwnProperty.call(
+        useStore.getState().keymapOverrides,
+        'global.searchNotes'
+      )
+    ).toBe(false)
+  })
+})
+
 describe('asset undo', () => {
   it('records deleted assets and restores them on undo', async () => {
     const deleted = {

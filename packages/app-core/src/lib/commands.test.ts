@@ -139,3 +139,32 @@ describe('close-tab command shortcut', () => {
     expect(shortcut).toMatch(/W/)
   })
 })
+
+describe('unbound command shortcuts', () => {
+  it('omits labels for unbound shortcuts and incomplete Vim sequences', async () => {
+    const { buildCommands, useStore } = await loadCommands()
+    useStore.setState({
+      vimMode: true,
+      keymapOverrides: {
+        'global.openSettings': null,
+        'vim.panePrefix': null
+      }
+    })
+
+    const commands = buildCommands()
+    expect(commands.find((command) => command.id === 'app.settings')?.shortcut).toBeUndefined()
+    expect(commands.find((command) => command.id === 'pane.focus.left')?.shortcut).toBeUndefined()
+  })
+
+  it('keeps only the remaining non-Vim search shortcut', async () => {
+    const { buildCommands, useStore } = await loadCommands()
+    useStore.setState({
+      vimMode: false,
+      keymapOverrides: { 'global.searchNotes': null }
+    })
+
+    const shortcut = buildCommands().find((command) => command.id === 'nav.search')?.shortcut
+    expect(shortcut).toBeTruthy()
+    expect(shortcut).not.toContain('/')
+  })
+})

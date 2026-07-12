@@ -21,6 +21,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { IPC } from '@shared/ipc'
+import { KEYMAP_CATALOG } from '@shared/keymaps-catalog'
 import type {
   NoteMeta,
   NoteCommentInput,
@@ -827,16 +828,39 @@ function isZoomShortcut(input: Electron.Input, key: string, code: string): boole
   return input.key === key || input.code === code
 }
 
+/** The main process owns a few native default accelerators. Once an action has
+ *  any explicit renderer override (custom or null), stop handling its shipped
+ *  default here and let the renderer own the custom binding—or no binding. */
+type NativeKeymapId =
+  | 'global.openSettings'
+  | 'global.zoomReset'
+  | 'global.zoomIn'
+  | 'global.zoomOut'
+
+function usesNativeDefaultKeymap(id: NativeKeymapId): boolean {
+  // Keep the catalog lookup as a guard against accidentally adding an unknown
+  // id to a native menu/handler.
+  if (!KEYMAP_CATALOG.some((entry) => entry.id === id)) return false
+  const raw = getPortableConfigSnapshot().keymapOverrides
+  return !(
+    raw &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    Object.prototype.hasOwnProperty.call(raw, id)
+  )
+}
+
 function installZoomControls(win: BrowserWindow): void {
   win.webContents.on('before-input-event', (event, input) => {
     const mod = input.control || input.meta
     if (!mod || input.alt) return
 
     if (
-      isZoomShortcut(input, '0', 'Digit0') ||
-      isZoomShortcut(input, ')', 'Digit0') ||
-      isZoomShortcut(input, '0', 'Numpad0') ||
-      isZoomShortcut(input, 'Insert', 'Numpad0')
+      usesNativeDefaultKeymap('global.zoomReset') &&
+      (isZoomShortcut(input, '0', 'Digit0') ||
+        isZoomShortcut(input, ')', 'Digit0') ||
+        isZoomShortcut(input, '0', 'Numpad0') ||
+        isZoomShortcut(input, 'Insert', 'Numpad0'))
     ) {
       event.preventDefault()
       void setWindowZoom(win, DEFAULT_ZOOM_FACTOR)
@@ -844,9 +868,10 @@ function installZoomControls(win: BrowserWindow): void {
     }
 
     if (
-      isZoomShortcut(input, '=', 'Equal') ||
-      isZoomShortcut(input, '+', 'Equal') ||
-      isZoomShortcut(input, '+', 'NumpadAdd')
+      usesNativeDefaultKeymap('global.zoomIn') &&
+      (isZoomShortcut(input, '=', 'Equal') ||
+        isZoomShortcut(input, '+', 'Equal') ||
+        isZoomShortcut(input, '+', 'NumpadAdd'))
     ) {
       event.preventDefault()
       void adjustWindowZoom(win, ZOOM_STEP)
@@ -854,9 +879,10 @@ function installZoomControls(win: BrowserWindow): void {
     }
 
     if (
-      isZoomShortcut(input, '-', 'Minus') ||
-      isZoomShortcut(input, '_', 'Minus') ||
-      isZoomShortcut(input, '-', 'NumpadSubtract')
+      usesNativeDefaultKeymap('global.zoomOut') &&
+      (isZoomShortcut(input, '-', 'Minus') ||
+        isZoomShortcut(input, '_', 'Minus') ||
+        isZoomShortcut(input, '-', 'NumpadSubtract'))
     ) {
       event.preventDefault()
       void adjustWindowZoom(win, -ZOOM_STEP)
@@ -2842,6 +2868,7 @@ function registerIpc(): void {
   })
   handle(IPC.CONFIG_SET, async (_event, next: AppConfigPortable) => {
     await setPortableConfig(next ?? {})
+    if (isMac()) installAppMenu()
   })
   handle(IPC.CONFIG_GET_PATH, () => getConfigFilePath())
   handle(IPC.CONFIG_REVEAL, async () => {
@@ -2874,6 +2901,7 @@ function registerIpc(): void {
 /** Push an externally-changed config (synced dotfile / hand-edit) to every
  *  open renderer so live-reload applies it without a restart. */
 function broadcastConfigChange(next: AppConfigPortable): void {
+  if (isMac()) installAppMenu()
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.webContents.send(IPC.CONFIG_ON_CHANGE, next)
   }
@@ -3195,7 +3223,9 @@ function installAppMenu(): void {
         { type: 'separator' },
         {
           label: 'Settings…',
-          accelerator: 'CmdOrCtrl+,',
+          accelerator: usesNativeDefaultKeymap('global.openSettings')
+            ? 'CmdOrCtrl+,'
+            : undefined,
           click: () => {
             const target = BrowserWindow.getFocusedWindow() ?? mainWindow
             target?.webContents.send(IPC.APP_OPEN_SETTINGS)
@@ -3247,21 +3277,27 @@ function installAppMenu(): void {
         { type: 'separator' },
         {
           label: 'Actual Size',
-          accelerator: 'CmdOrCtrl+0',
+          accelerator: usesNativeDefaultKeymap('global.zoomReset')
+            ? 'CmdOrCtrl+0'
+            : undefined,
           click: () => {
             void setWindowZoom(BrowserWindow.getFocusedWindow(), DEFAULT_ZOOM_FACTOR)
           }
         },
         {
           label: 'Zoom In',
-          accelerator: 'CmdOrCtrl+=',
+          accelerator: usesNativeDefaultKeymap('global.zoomIn')
+            ? 'CmdOrCtrl+='
+            : undefined,
           click: () => {
             void adjustWindowZoom(BrowserWindow.getFocusedWindow(), ZOOM_STEP)
           }
         },
         {
           label: 'Zoom Out',
-          accelerator: 'CmdOrCtrl+-',
+          accelerator: usesNativeDefaultKeymap('global.zoomOut')
+            ? 'CmdOrCtrl+-'
+            : undefined,
           click: () => {
             void adjustWindowZoom(BrowserWindow.getFocusedWindow(), -ZOOM_STEP)
           }
