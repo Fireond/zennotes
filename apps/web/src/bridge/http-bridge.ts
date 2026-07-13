@@ -127,6 +127,10 @@ function resolveBasePath(): string {
 const BASE_PATH = resolveBasePath()
 const API_BASE = `${BASE_PATH}/api`
 
+// Deployment base path (e.g. "" at the root, "/zennotes" behind a proxy), so
+// entrypoint code can build same-origin asset URLs that survive subpath mounts.
+export const webBasePath = BASE_PATH
+
 type JsonBody = Record<string, unknown> | unknown[]
 type JsonRequestInit = Omit<RequestInit, 'body'> & { body?: JsonBody }
 
