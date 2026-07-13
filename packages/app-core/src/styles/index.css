@@ -4152,6 +4152,12 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   margin: 0 0 0 -16px;
   padding: 14px 9px 9px 16px;
   overflow-x: auto;
+  /* Only scroll horizontally (wide tables); never show a vertical scrollbar.
+     `overflow-x: auto` alone makes CSS compute `overflow-y` to `auto`, and the
+     hover add-row rail sitting in the bottom padding gutter tips the widget a
+     few sub-pixels into vertical overflow, drawing a stray vertical scrollbar
+     down the right edge. (#382) */
+  overflow-y: hidden;
   white-space: normal;
   font-family: var(
     --z-text-font,
@@ -4317,8 +4323,10 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 .cm-table-widget th[align="right"] .cm-table-cell {
   text-align: right;
 }
-/* Hover add-buttons: a thin "+" rail along the right edge (column) and the
-   bottom edge (row) of the grid. */
+/* Hover add-buttons: a thin "+" rail just outside the right edge (column) and
+   the bottom edge (row) of the grid. They live in the widget's right/bottom
+   padding gutter rather than on top of the last column/row, which would obscure
+   those cells (#382). */
 .cm-table-widget .cm-table-add {
   position: absolute;
   display: flex;
@@ -4344,16 +4352,19 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 }
 .cm-table-widget .cm-table-add-col {
   top: 0;
-  right: 0;
+  /* Sit flush against the table's right border, in the gutter, not over the
+     last column. */
+  left: 100%;
   width: 9px;
   height: 100%;
 }
 .cm-table-widget .cm-table-add-row {
   left: 0;
-  bottom: 0;
+  /* Sit just below the table's bottom border, in the gutter, not over the
+     last row. */
+  top: 100%;
   height: 9px;
-  /* Span the grid, not the button rail on the right. */
-  width: calc(100% - 10px);
+  width: 100%;
 }
 
 /* Drag-to-reorder grips: row grip left of each body row, column grip above
