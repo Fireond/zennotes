@@ -519,7 +519,11 @@ export function VimNav(): JSX.Element | null {
         const gTabTokens = getSequenceTokens(overrides, 'vim.tabNext')
         const gPrevTokens = getSequenceTokens(overrides, 'vim.tabPrevious')
         const gTok = sequenceTokenFromEvent(e)
+        const inExcalidrawView = !!target?.closest('[data-excalidraw-view]')
         if (gTabPending.current) {
+          // Shift is delivered as its own keydown before `T`; keep the pending
+          // `g` prefix alive so Excalidraw can complete Vim-style `gT`.
+          if (!gTok) return
           gTabPending.current = false
           if (gTabTimer.current) clearTimeout(gTabTimer.current)
           if (gTabTokens.length === 2 && gTok === gTabTokens[1]) {
@@ -536,12 +540,21 @@ export function VimNav(): JSX.Element | null {
           }
           // Not a tab completion (e.g. gg, gd): fall through without consuming.
         }
-        if (gTok && gTabTokens.length === 2 && gTok === gTabTokens[0]) {
+        const startsTabSequence =
+          !!gTok &&
+          ((gTabTokens.length === 2 && gTok === gTabTokens[0]) ||
+            (gPrevTokens.length === 2 && gTok === gPrevTokens[0]))
+        if (startsTabSequence) {
           gTabPending.current = true
           if (gTabTimer.current) clearTimeout(gTabTimer.current)
           gTabTimer.current = setTimeout(() => {
             gTabPending.current = false
           }, 500)
+          if (inExcalidrawView) {
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            return
+          }
         }
       }
 
