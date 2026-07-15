@@ -87,6 +87,7 @@ import { hashtagExtension } from '../lib/cm-hashtags'
 import { applyHighlight, HIGHLIGHT_COLORS, highlightExtension } from '../lib/cm-highlight'
 import { wikilinkRenderExtension } from '../lib/cm-wikilink-render'
 import { mathRenderExtension } from '../lib/cm-math-render'
+import { mathBlockArrowKeymap } from '../lib/cm-math-nav'
 import { slashCommandSource, slashCommandRender } from '../lib/cm-slash-commands'
 import { calloutTypeSource } from '../lib/cm-callouts'
 import { dateShortcutSource } from '../lib/cm-date-shortcuts'
@@ -286,6 +287,9 @@ function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extens
       run: moveLineDown
     },
     ...vimHalfPageKeymap(vimMode, overrides),
+    // Step arrows into rendered $$…$$ blocks (insert mode + non-Vim); Vim's
+    // j/k get the same treatment inside the display-line motion.
+    ...mathBlockArrowKeymap,
     indentWithTab,
     ...vimAwareDefaultKeymap(vimMode),
     ...historyKeymap,

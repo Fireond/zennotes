@@ -87,9 +87,22 @@ function isInsideCode(state: EditorState, pos: number): boolean {
   }
 }
 
-function buildDecorations(state: EditorState): DecorationSet {
+/** 1-based doc line range of one block `$$…$$` (fence lines included). */
+export interface MathBlockLineRange {
+  fromLine: number
+  toLine: number
+}
+
+interface MathRenderValue {
+  decorations: DecorationSet
+  /** Every block-math range, whether currently rendered or revealed. */
+  blockLines: readonly MathBlockLineRange[]
+}
+
+function buildMathRender(state: EditorState): MathRenderValue {
   const pending: Array<{ from: number; to: number; deco: Decoration }> = []
   const consumed: Array<[number, number]> = []
+  const blockLines: MathBlockLineRange[] = []
   const doc = state.doc
   const text = doc.toString()
 
@@ -113,6 +126,7 @@ function buildDecorations(state: EditorState): DecorationSet {
     // Reserve the whole-line span so inline scanning skips inside it, whether the
     // block ends up rendered or revealed.
     consumed.push([openLine.from, closeLine.to])
+    blockLines.push({ fromLine: openLine.number, toLine: closeLine.number })
     if (selectionTouches(state, openLine.from, closeLine.to)) continue
     pending.push({
       from: openLine.from,
@@ -145,20 +159,31 @@ function buildDecorations(state: EditorState): DecorationSet {
   pending.sort((a, b) => a.from - b.from || a.to - b.to)
   const builder = new RangeSetBuilder<Decoration>()
   for (const p of pending) builder.add(p.from, p.to, p.deco)
-  return builder.finish()
+  return { decorations: builder.finish(), blockLines }
 }
 
-const mathRenderField = StateField.define<DecorationSet>({
-  create: (state) => buildDecorations(state),
-  update(deco, tr) {
+const mathRenderField = StateField.define<MathRenderValue>({
+  create: (state) => buildMathRender(state),
+  update(value, tr) {
     // Rebuild on edits, on cursor moves (to reveal/hide the active formula), and
     // when the parser advances (isInsideCode reads the syntax tree).
     if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
-      return buildDecorations(tr.state)
+      return buildMathRender(tr.state)
     }
-    return deco
+    return value
   },
-  provide: (field) => EditorView.decorations.from(field)
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations)
 })
+
+/**
+ * 1-based line ranges of every block `$$…$$` in the document (rendered or
+ * revealed), or `[]` when math rendering isn't active in this editor. Used by
+ * vertical cursor motion to step *into* a rendered block instead of letting
+ * pixel-based movement skip over its widget (see cm-vim-display-line.ts and
+ * cm-math-nav.ts).
+ */
+export function mathBlockLineRanges(state: EditorState): readonly MathBlockLineRange[] {
+  return state.field(mathRenderField, false)?.blockLines ?? []
+}
 
 export const mathRenderExtension: Extension = [mathRenderField]
