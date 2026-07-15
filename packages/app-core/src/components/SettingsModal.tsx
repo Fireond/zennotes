@@ -1638,7 +1638,7 @@ export function SettingsModal(): JSX.Element {
           >
             <ToggleRow
               label="Use theme for PDF export"
-              description="On: exported PDFs use your current theme — colors and dark/light, including custom themes. Off: a clean light theme, best for printing on paper."
+              description="On: exported PDFs match your preview, your current theme (colors and dark/light, including custom themes) plus your CSS snippets and color tweaks. Off: a clean light theme, best for printing on paper."
               value={pdfExportUseTheme}
               settingId="pdf-export-use-theme"
               onChange={setPdfExportUseTheme}
