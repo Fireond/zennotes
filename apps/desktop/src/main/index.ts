@@ -186,7 +186,7 @@ import {
   writeCustomInstructions,
   MCP_SERVER_INSTRUCTIONS
 } from '../mcp/instructions-store'
-import { recordMainPerf } from './perf'
+import { recordBootMark, recordMainPerf } from './perf'
 import {
   parseOpenNoteDeepLink,
   parseQuickCaptureDeepLink,
@@ -206,6 +206,10 @@ import type {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const nodeRequire = createRequire(import.meta.url)
+
+// First point our code runs: everything before this is Electron/Node binary
+// startup (and, on Linux AppImages, the runtime's FUSE mount).
+recordBootMark('main.boot.module-loaded')
 const LOCAL_ASSET_SCHEME = 'zen-asset'
 const THEME_ASSET_SCHEME = 'zen-theme'
 const EXCALIDRAW_ASSET_SCHEME = 'zen-excalidraw'
@@ -1089,7 +1093,8 @@ async function createWindow(options: CreateWindowOptions = {}): Promise<BrowserW
 
   win.on('ready-to-show', () => {
     recordMainPerf('main.window.ready-to-show', performance.now() - createWindowStartedAt, {
-      restored: !!restoredState
+      restored: !!restoredState,
+      uptimeMs: Math.round(process.uptime() * 1000)
     })
     if (restoredState?.isMaximized) win.maximize()
     win.show()
@@ -1100,7 +1105,8 @@ async function createWindow(options: CreateWindowOptions = {}): Promise<BrowserW
   })
   win.webContents.once('did-finish-load', () => {
     recordMainPerf('main.window.did-finish-load', performance.now() - createWindowStartedAt, {
-      restored: !!restoredState
+      restored: !!restoredState,
+      uptimeMs: Math.round(process.uptime() * 1000)
     })
   })
 
@@ -3596,6 +3602,10 @@ if (process.platform === 'linux') {
 }
 
 app.whenReady().then(async () => {
+  // The gap from `main.boot.module-loaded` to here is Chromium/GTK
+  // initialization — on Linux this is where fontconfig cache rebuilds and
+  // desktop-portal waits land, none of it our code.
+  recordBootMark('main.boot.app-ready')
   // A second launch (e.g. double-clicking a .md on Windows/Linux) hands
   // its argv to the primary instance via 'second-instance' below, then
   // quits here so there's only ever one ZenNotes process.

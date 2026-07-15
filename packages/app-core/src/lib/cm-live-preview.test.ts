@@ -65,12 +65,12 @@ describe('livePreviewPlugin', () => {
     view.destroy()
   })
 
-  it('keeps heading markers hidden when editing the heading text', () => {
+  it('reveals heading markers with the cursor anywhere in the heading', () => {
+    // Consistent with list/quote/task markers: the active line reads as source.
     const doc = '# Code blocks\n\nBody'
-    const view = mountEditor(doc, doc.indexOf('Code'))
+    const view = mountEditor(doc, doc.indexOf('blocks'))
 
-    expect(view.dom.textContent).toContain('Code blocks')
-    expect(view.dom.textContent).not.toContain('# Code blocks')
+    expect(view.dom.textContent).toContain('# Code blocks')
 
     view.destroy()
   })
@@ -80,6 +80,16 @@ describe('livePreviewPlugin', () => {
     const view = mountEditor(doc, 0)
 
     expect(view.dom.textContent).toContain('# Code blocks')
+
+    view.destroy()
+  })
+
+  it('hides heading markers when the cursor is on another line', () => {
+    const doc = '# Code blocks\n\nBody'
+    const view = mountEditor(doc, doc.indexOf('Body'))
+
+    expect(view.dom.textContent).toContain('Code blocks')
+    expect(view.dom.textContent).not.toContain('# Code blocks')
 
     view.destroy()
   })

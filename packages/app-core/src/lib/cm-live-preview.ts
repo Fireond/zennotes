@@ -998,9 +998,12 @@ function computeDecorations(view: EditorView): DecorationSet {
           const linkRange = enclosingLinkRange(node)
           if (linkRange && selectionTouchesRange(state, linkRange.from, linkRange.to)) return
         } else if (activeLines.has(line)) {
-          const keepHeadingMarkerHidden =
-            name === 'HeaderMark' && !selectionTouchesRange(state, node.from, node.to)
-          if (!keepHeadingMarkerHidden) return
+          // Reveal every marker on the active line, headings included: the
+          // cursor anywhere in a heading shows its `##` prefix, matching the
+          // list/quote/task markers and the other markdown elements (a heading
+          // used to reveal only when the selection touched the marker itself,
+          // which read as "works differently from everything else").
+          return
         }
 
         let start = node.from
