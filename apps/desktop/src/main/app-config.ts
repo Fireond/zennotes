@@ -139,6 +139,16 @@ const SCALAR_FIELDS: Partial<Record<PortablePrefKey, ScalarFieldMap>> = {
     tomlKey: 'editor_max_width',
     comment: 'max width of the editor column (px)'
   },
+  completedTaskStyle: {
+    section: 'editor',
+    tomlKey: 'completed_task_style',
+    comment: 'none | strikethrough | gray | gray-strikethrough — style checked-task text'
+  },
+  keepViewModeAcrossNotes: {
+    section: 'editor',
+    tomlKey: 'keep_view_mode_across_notes',
+    comment: 'keep the current Edit / Split / Preview mode when switching notes'
+  },
   lineNumberMode: {
     section: 'editor',
     tomlKey: 'line_number_mode',

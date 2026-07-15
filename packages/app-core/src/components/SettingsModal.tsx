@@ -436,6 +436,12 @@ export function SettingsModal(): JSX.Element {
   const setRenderTablesInLivePreview = useStore(
     (s) => s.setRenderTablesInLivePreview,
   );
+  const completedTaskStyle = useStore((s) => s.completedTaskStyle);
+  const setCompletedTaskStyle = useStore((s) => s.setCompletedTaskStyle);
+  const keepViewModeAcrossNotes = useStore((s) => s.keepViewModeAcrossNotes);
+  const setKeepViewModeAcrossNotes = useStore(
+    (s) => s.setKeepViewModeAcrossNotes,
+  );
   const markdownSnippets = useStore((s) => s.markdownSnippets);
   const setMarkdownSnippets = useStore((s) => s.setMarkdownSnippets);
   const tabsEnabled = useStore((s) => s.tabsEnabled);
@@ -2051,6 +2057,26 @@ export function SettingsModal(): JSX.Element {
                     onChange={setRenderTablesInLivePreview}
                   />
                 )}
+                <SegmentedRow
+                  label="Completed task style"
+                  description="How a checked task's text looks in the editor and preview — strike it through, gray it out, or both. The checkbox always shows checked."
+                  value={completedTaskStyle}
+                  settingId="completed-task-style"
+                  options={[
+                    { value: "none", label: "None" },
+                    { value: "strikethrough", label: "Strikethrough" },
+                    { value: "gray", label: "Gray" },
+                    { value: "gray-strikethrough", label: "Both" },
+                  ]}
+                  onChange={(next) => setCompletedTaskStyle(next)}
+                />
+                <ToggleRow
+                  label="Keep view mode when switching notes"
+                  description="Stay in the current Edit / Split / Preview mode when you open another note, instead of each note reopening in its own last mode. Handy if you like reading in Preview."
+                  value={keepViewModeAcrossNotes}
+                  settingId="keep-view-mode"
+                  onChange={setKeepViewModeAcrossNotes}
+                />
                 <ToggleRow
                   label="Markdown snippets"
                   description="Auto-close markdown as you type: ** / __ / ~~ / ` / == / [[ / %% then Space wrap the cursor, and ``` / ~~~ / $$ then Enter expand a fenced block. In Vim mode this only applies in insert mode."

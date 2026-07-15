@@ -871,7 +871,27 @@ export function Sidebar(): JSX.Element {
       await moveNoteAction(payload.path, targetFolder, targetSubpath);
       return;
     }
-    if (payload.kind === "asset") return;
+    if (payload.kind === "asset") {
+      // Move an asset (image / PDF / any attachment) into the target folder,
+      // the same operation as the row's "Move…" context-menu action. Without
+      // this, assets were draggable but silently ignored on folder drop. (#378)
+      if (typeof window.zen.moveAsset !== "function") return;
+      const targetDir = vaultRelativeFolderPath(
+        targetFolder,
+        targetSubpath,
+        vaultSettings,
+      );
+      const slash = payload.path.lastIndexOf("/");
+      const curDir = slash === -1 ? "" : payload.path.slice(0, slash);
+      if (curDir === targetDir) return; // already in this folder
+      try {
+        await window.zen.moveAsset(payload.path, targetDir);
+        await refreshAssets();
+      } catch (err) {
+        window.alert((err as Error).message);
+      }
+      return;
+    }
     if (payload.kind === "task") return;
     // Folder drop — cross-top-folder moves aren't supported (folders
     // can't move between inbox/archive/trash). Same-top-folder moves

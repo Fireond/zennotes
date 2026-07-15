@@ -94,6 +94,7 @@ describe('TOML serialization', () => {
   it('round-trips portable prefs, including nullable and map fields', () => {
     const portable: AppConfigPortable = {
       vimMode: false,
+      keepViewModeAcrossNotes: true,
       editorFontSize: 18,
       editorLineHeight: 1.6,
       themeFamily: 'nord',
@@ -117,6 +118,8 @@ describe('TOML serialization', () => {
     const { version, portable: round } = deserializeConfig(text)
     expect(version).toBe(CONFIG_VERSION)
     expect(round.vimMode).toBe(false)
+    expect(text).toContain('keep_view_mode_across_notes = true')
+    expect(round.keepViewModeAcrossNotes).toBe(true)
     expect(round.editorFontSize).toBe(18)
     expect(round.editorLineHeight).toBeCloseTo(1.6)
     expect(round.themeFamily).toBe('nord')

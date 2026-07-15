@@ -1153,6 +1153,34 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       run: () => getState().setVimMode(!getState().vimMode)
     },
     {
+      id: 'editor.completed-task.none',
+      title: 'Completed Tasks: No Style',
+      category: 'Editor',
+      when: () => getState().completedTaskStyle !== 'none',
+      run: () => getState().setCompletedTaskStyle('none')
+    },
+    {
+      id: 'editor.completed-task.strikethrough',
+      title: 'Completed Tasks: Strikethrough',
+      category: 'Editor',
+      when: () => getState().completedTaskStyle !== 'strikethrough',
+      run: () => getState().setCompletedTaskStyle('strikethrough')
+    },
+    {
+      id: 'editor.completed-task.gray',
+      title: 'Completed Tasks: Gray',
+      category: 'Editor',
+      when: () => getState().completedTaskStyle !== 'gray',
+      run: () => getState().setCompletedTaskStyle('gray')
+    },
+    {
+      id: 'editor.completed-task.gray-strikethrough',
+      title: 'Completed Tasks: Strikethrough + Gray',
+      category: 'Editor',
+      when: () => getState().completedTaskStyle !== 'gray-strikethrough',
+      run: () => getState().setCompletedTaskStyle('gray-strikethrough')
+    },
+    {
       id: 'editor.which-key.toggle',
       title: getState().whichKeyHints
         ? 'Disable Leader Key Hints'

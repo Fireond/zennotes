@@ -211,4 +211,19 @@ describe('livePreviewPlugin', () => {
 
     view.destroy()
   })
+
+  it('marks a completed task’s text with cm-task-done and leaves incomplete tasks alone', () => {
+    // Cursor on the intro line so both task lines are inactive (rendered). The
+    // CSS (gated by the completedTaskStyle setting) then strikes/grays the mark.
+    const doc = ['intro', '- [x] finished item', '- [ ] pending item'].join('\n')
+    const view = mountEditor(doc, 0)
+
+    const marked = Array.from(view.dom.querySelectorAll('.cm-task-done'))
+      .map((el) => el.textContent)
+      .join(' ')
+    expect(marked).toContain('finished item')
+    expect(marked).not.toContain('pending item')
+
+    view.destroy()
+  })
 })
