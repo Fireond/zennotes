@@ -5195,7 +5195,12 @@ function TreeRow({
           </svg>
         </span>
       )}
-      {sidebarFocused && vimHighlight && (
+      {/* #402: only advertise `m` where a context menu actually exists. The
+          virtual Daily/Weekly/Monthly date subgroups (year/month) render
+          through this row without an onContextMenu handler (they aren't real
+          folders), so pressing `m` there did nothing while the hint claimed it
+          would. Real folders and the date-root rows always pass onContextMenu. */}
+      {sidebarFocused && vimHighlight && onContextMenu && (
         <RowKeyHint
           active={active || selected}
           keyLabel="m"
