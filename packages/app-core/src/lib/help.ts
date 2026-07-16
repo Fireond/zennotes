@@ -766,7 +766,7 @@ export const HELP_SETTINGS: HelpSettingsSection[] = [
       { label: 'Theme, mode, and variant', detail: 'Pick a theme family — Apple, Gruvbox, Catppuccin, GitHub, Solarized, One, Nord, Tokyo Night, Kanagawa (Wave / Dragon / Paper Ink (Custom) / Lotus), Rosé Pine (Rosé Pine / Moon / Dawn), or the monochrome, true-black (OLED-friendly) Black Metal — plus light or dark mode and the active flavor or contrast where the theme supports it.' },
       { label: 'Dark sidebar', detail: 'Tint the sidebar slightly darker than the canvas so the chrome reads as a distinct surface.' },
       { label: 'Sidebar arrows', detail: 'Show or hide disclosure arrows for collapsible sidebar folders and sections.' },
-      { label: 'Use theme for PDF export', detail: 'Under Settings → Appearance → PDF export. Off by default, so exported PDFs use a clean light print theme. Turn it on to render the PDF in your current theme instead — colors and dark/light, including custom themes — as a full-bleed page.' }
+      { label: 'Use theme for PDF export', detail: 'Under Settings → Appearance → PDF export. Off by default, so exported PDFs use a clean light print theme. Turn it on to export in your current look instead: your theme (colors and dark/light, including custom themes), plus your enabled CSS snippets and color tweaks, as a full-bleed page. This toggle is the single switch for how the PDF looks; your CSS snippets style the export only while it is on, so you customize the PDF by editing your snippets, not with a separate print stylesheet.' }
     ]
   },
   {

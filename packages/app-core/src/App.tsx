@@ -811,7 +811,13 @@ function App(): JSX.Element {
         state.outlinePaletteOpen ||
         document.querySelector('[data-ctx-menu]') ||
         document.querySelector('[data-prompt-modal]') ||
-        document.querySelector('[data-confirm-modal]')
+        document.querySelector('[data-confirm-modal]') ||
+        // An open autocomplete popup (slash menu, [[ links, the callout [! type
+        // picker) owns the keyboard: its Ctrl+J/Ctrl+K/Ctrl+N/Ctrl+P navigation
+        // must win over a focusPane shortcut a user remapped onto those chords,
+        // rather than switching panes mid-completion. Mirrors the completion
+        // deferral for inline-format shortcuts (#337). Reported by Tornado300.
+        document.querySelector('.cm-tooltip-autocomplete')
       ) {
         return
       }
