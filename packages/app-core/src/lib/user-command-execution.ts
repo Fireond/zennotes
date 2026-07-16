@@ -78,6 +78,7 @@ const SETTINGS_KEYMAP_COMMAND_ALIASES: Partial<Record<KeymapId, string>> = {
   'vim.paneSplitDown': 'split.down',
   'vim.historyBack': 'nav.back',
   'vim.historyForward': 'nav.forward',
+  'vim.flashJump': 'editor.flash.jump',
   'vim.foldCurrent': 'fold.heading',
   'vim.unfoldCurrent': 'fold.unfold-heading',
   'vim.foldAll': 'fold.all',

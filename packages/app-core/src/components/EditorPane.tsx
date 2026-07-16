@@ -70,6 +70,7 @@ import {
   vimClipboardPasteExtension,
 } from '../lib/cm-vim-clipboard'
 import { wireYankHighlight, yankHighlightExtension } from '../lib/cm-yank-highlight'
+import { vimFlashExtension } from '../lib/cm-vim-flash'
 import { frontmatterStyle } from '../lib/cm-frontmatter'
 import { codeBlockFontPlugin } from '../lib/cm-code-block-font'
 import {
@@ -1580,6 +1581,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           highlightActiveLine(),
           taskJumpHighlightField,
           yankHighlightExtension,
+          vimFlashExtension,
           vimClipboardPasteExtension,
           commentDecorationField,
           wordWrapCompartment.of(s0.wordWrap ? EditorView.lineWrapping : []),

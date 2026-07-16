@@ -80,7 +80,8 @@ You can:
 
 - inspect current bindings
 - override individual bindings
-- reset them
+- explicitly unbind actions
+- restore their defaults
 
 ZenNotes also exposes Vim-oriented flows in the shared UI.
 
@@ -90,8 +91,11 @@ Important current examples:
 - `Zoom in` defaults to `Mod+=`
 - `Zoom out` defaults to `Mod+-`
 - `Reset zoom` defaults to `Mod+0`
+- `Flash jump` (`vim.flashJump`) defaults to `s` in the Vim main editor
 
 These shortcuts are editable from Settings instead of being hard-coded renderer-only behavior.
+
+`Flash jump` starts an incremental, labeled search across the editor's currently visible viewport ranges. Type as much of a literal query as needed; matching is Unicode-aware and case-insensitive. Mounted inline and block math formulas are searchable by either visible rendered text or raw inner LaTeX. Every matching occurrence receives its own approximately positioned label; raw-LaTeX targets jump to the exact source occurrence, while rendered-only targets use the nearest approximate source token. Formula labels are overlays and do not change KaTeX's layout. Unbinding the action restores Vim's original `s` substitute command. The same feature also enhances same-line `f{character}` and `F{character}` motions: `f` repeats in the original direction and `F` moves to the previous match. See [Programmable Vim Configuration](./programmable-vim-config.md#use-flash-style-motions) for behavior, `config.toml`, and `init.mjs` examples.
 
 The desktop app also supports config-file-only Vim remaps and trusted buffer scripts in
 `~/.config/zennotes/init.mjs`. See [Programmable Vim Configuration](./programmable-vim-config.md).

@@ -11,8 +11,10 @@ const mocks = vi.hoisted(() => {
   const jumpToPreviousNote = vi.fn().mockResolvedValue(undefined)
   const jumpToNextNote = vi.fn().mockResolvedValue(undefined)
   const closeActiveNote = vi.fn().mockResolvedValue(undefined)
+  const splitPaneWithTab = vi.fn().mockResolvedValue(undefined)
   const state = {
     activeNote: null,
+    activePaneId: 'pane-1',
     bufferPaletteOpen: false,
     commandPaletteOpen: false,
     editorViewRef: null as EditorView | null,
@@ -28,13 +30,21 @@ const mocks = vi.hoisted(() => {
     jumpToPreviousNote,
     jumpToNextNote,
     closeActiveNote,
+    splitPaneWithTab,
     setFocusedPanel: vi.fn()
   }
   const useStore = Object.assign(
     (selector: (current: typeof state) => unknown) => selector(state),
     { getState: () => state }
   )
-  return { closeActiveNote, jumpToNextNote, jumpToPreviousNote, state, useStore }
+  return {
+    closeActiveNote,
+    jumpToNextNote,
+    jumpToPreviousNote,
+    splitPaneWithTab,
+    state,
+    useStore
+  }
 })
 
 vi.mock('../store', () => ({
@@ -45,6 +55,7 @@ vi.mock('../store', () => ({
 
 import { VimNav } from './VimNav'
 import { applyUserVimMappings, clearUserVimMappings } from '../lib/user-vim-keymaps'
+import { isVimFlashActive, vimFlashExtension } from '../lib/cm-vim-flash'
 
 describe('VimNav note-history precedence', () => {
   let host: HTMLDivElement
@@ -75,7 +86,10 @@ describe('VimNav note-history precedence', () => {
     document.body.append(host, editorHost)
     root = createRoot(host)
     view = new EditorView({
-      state: EditorState.create({ doc: 'hello', extensions: [vim()] }),
+      state: EditorState.create({
+        doc: 'hello',
+        extensions: [vim(), vimFlashExtension]
+      }),
       parent: editorHost
     })
     mocks.state.editorViewRef = view
@@ -191,6 +205,183 @@ describe('VimNav note-history precedence', () => {
 
     expect(mocks.jumpToNextNote).not.toHaveBeenCalled()
     expect(runCommand).toHaveBeenCalledOnce()
+  })
+
+  it('starts and consumes the default s Flash binding', () => {
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(isVimFlashActive(view)).toBe(true)
+    expect(view.state.doc.toString()).toBe('hello')
+  })
+
+  it('lets stock Vim handle s when Flash is explicitly unbound', () => {
+    mocks.state.keymapOverrides = { 'vim.flashJump': null }
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(isVimFlashActive(view)).toBe(false)
+    // Vim's stock `s` command deletes the character under the cursor and
+    // enters insert mode; this proves the Settings action yielded fully.
+    expect(view.state.doc.toString()).toBe('ello')
+  })
+
+  it('gives an explicit init.mjs s mapping precedence over Flash', () => {
+    const runCommand = vi.fn()
+    applyUserVimMappings(
+      [
+        {
+          mode: 'n',
+          lhs: 's',
+          target: { type: 'command', commandId: 'user.flash-override' }
+        }
+      ],
+      { runCommand }
+    )
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(runCommand).toHaveBeenCalledOnce()
+    expect(isVimFlashActive(view)).toBe(false)
+    expect(view.state.doc.toString()).toBe('hello')
+  })
+
+  it('starts Flash from a remapped single-key Settings binding', () => {
+    mocks.state.keymapOverrides = { 'vim.flashJump': 'x' }
+    const event = new KeyboardEvent('keydown', {
+      key: 'x',
+      code: 'KeyX',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(isVimFlashActive(view)).toBe(true)
+    // Stock Vim `x` would delete `h`; the remapped action consumed it first.
+    expect(view.state.doc.toString()).toBe('hello')
+  })
+
+  it('lets a pending f motion consume s as its literal character', async () => {
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: 'a s s' },
+      selection: { anchor: 0 }
+    })
+
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'f',
+        code: 'KeyF',
+        bubbles: true,
+        cancelable: true
+      })
+    )
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 's',
+        code: 'KeyS',
+        bubbles: true,
+        cancelable: true
+      })
+    )
+    await Promise.resolve()
+
+    expect(view.state.selection.main.head).toBe(2)
+    expect(view.state.doc.toString()).toBe('a s s')
+  })
+
+  it('keeps the leader search prefix ahead of standalone Flash', async () => {
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    await act(async () => {
+      view.contentDOM.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          bubbles: true,
+          cancelable: true
+        })
+      )
+      view.contentDOM.dispatchEvent(event)
+    })
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(isVimFlashActive(view)).toBe(false)
+  })
+
+  it('keeps Ctrl+W split-down ahead of standalone Flash', () => {
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'w',
+        code: 'KeyW',
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true
+      })
+    )
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(isVimFlashActive(view)).toBe(false)
+    expect(mocks.splitPaneWithTab).toHaveBeenCalledWith({
+      targetPaneId: 'pane-1',
+      edge: 'bottom',
+      path: 'inbox/n.md'
+    })
+  })
+
+  it('allows a numeric Vim count before the Flash binding', () => {
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: '2',
+        code: 'Digit2',
+        bubbles: true,
+        cancelable: true
+      })
+    )
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      code: 'KeyS',
+      bubbles: true,
+      cancelable: true
+    })
+
+    view.contentDOM.dispatchEvent(event)
+
+    expect(event.defaultPrevented).toBe(true)
+    expect(isVimFlashActive(view)).toBe(true)
   })
 
   it('lets an unbound pane prefix release Ctrl+W to close the active tab', () => {

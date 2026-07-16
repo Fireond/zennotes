@@ -62,6 +62,7 @@ export type KeymapId =
   | "vim.paneFocusRight"
   | "vim.paneSplitRight"
   | "vim.paneSplitDown"
+  | "vim.flashJump"
   | "vim.historyBack"
   | "vim.historyForward"
   | "vim.bufferPrevious"
@@ -643,6 +644,17 @@ const KEYMAP_DEFINITIONS: KeymapDefinition[] = [
     group: "vim",
     title: "Pane: split down",
     description: "Clone the current tab into a pane below.",
+    defaultBinding: "s",
+    vimOnly: true,
+    maxTokens: 1,
+  },
+  {
+    id: "vim.flashJump",
+    kind: "sequence",
+    scope: "vim-editor",
+    group: "vim",
+    title: "Flash jump",
+    description: "Type a query, then a visible label, to jump anywhere in the editor viewport.",
     defaultBinding: "s",
     vimOnly: true,
     maxTokens: 1,

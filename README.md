@@ -113,6 +113,7 @@ Every note is a normal `.md` file inside a chosen vault. ZenNotes does not store
 ZenNotes assumes you want to move fast:
 
 - first-class Vim mode
+- Flash-style viewport jumps and repeatable `f/F` motions
 - leader-key flows
 - command palette
 - pane and tab motion
@@ -188,6 +189,7 @@ The editor stack is CodeMirror 6 with a Markdown-oriented workflow:
 - syntax highlighting for fenced code blocks
 - wiki links, callouts, tables, footnotes, and local embeds
 - Vim block cursor and keyboard navigation
+- incremental labeled jumps within the visible editor viewport
 
 Preview and split mode support:
 

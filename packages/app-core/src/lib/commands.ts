@@ -19,6 +19,8 @@ import { getKeymapBinding, getKeymapDisplay, type KeymapId } from './keymaps'
 import { dispatchKeyboardContextMenu, findTabContextMenuTarget } from './keyboard-context-menu'
 import { resolveSystemFolderLabels } from './system-folder-labels'
 import { normalizeVaultSettings } from './vault-layout'
+import { startVimFlashJump } from './cm-vim-flash'
+import { isEditorInsertMode } from './vim-nav'
 import { DEMO_TOUR_START_PATH } from '@shared/demo-tour'
 
 const APP_WEBSITE_URL = 'https://zennotes.org'
@@ -736,6 +738,28 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       category: 'App',
       keywords: 'bug issue github feedback problem',
       run: () => openExternal(APP_ISSUES_URL)
+    },
+    {
+      id: 'editor.flash.jump',
+      title: 'Flash Jump',
+      category: 'Editor',
+      shortcut: shortcut('vim.flashJump'),
+      keywords: 'vim motion search label leap',
+      when: () => {
+        const state = getState()
+        return (
+          state.vimMode &&
+          !!state.editorViewRef &&
+          !!state.activeNote &&
+          !isEditorInsertMode(state.editorViewRef, state.vimMode)
+        )
+      },
+      run: () => {
+        const view = getState().editorViewRef
+        if (!view) return
+        view.focus()
+        startVimFlashJump(view)
+      }
     },
     {
       id: 'fold.heading',

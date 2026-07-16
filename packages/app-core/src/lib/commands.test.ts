@@ -168,3 +168,20 @@ describe('unbound command shortcuts', () => {
     expect(shortcut).not.toContain('/')
   })
 })
+
+describe('Flash command', () => {
+  it('registers editor.flash.jump with the vim.flashJump Settings binding', async () => {
+    const { buildCommands, useStore } = await loadCommands()
+    useStore.setState({
+      keymapOverrides: { 'vim.flashJump': 'x' }
+    })
+
+    const command = buildCommands({ includeUnavailable: true }).find(
+      (candidate) => candidate.id === 'editor.flash.jump'
+    )
+
+    expect(command?.title).toBe('Flash Jump')
+    expect(command?.category).toBe('Editor')
+    expect(command?.shortcut).toBe('x')
+  })
+})

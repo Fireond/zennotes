@@ -39,6 +39,7 @@ import {
   getUserVimSequenceMatch,
   sequenceTokenToVimNotation
 } from '../lib/user-vim-keymaps'
+import { handleVimFlashKey, startVimFlashJump } from '../lib/cm-vim-flash'
 import { isWorkspaceVirtualTabPath } from '../lib/workspace-tabs'
 import {
   isExcalidrawPath,
@@ -461,16 +462,42 @@ export function VimNav(): JSX.Element | null {
       const previewEl = getPreviewScrollElement()
       const hoverPreviewEl = getHoverPreviewScrollElement()
 
-      // Explicit init.mjs mappings own their complete buffered sequence while
-      // the main editor is focused. Yield before leader/pane/app routing so
-      // CodeMirror-Vim can dispatch its configured target.
+      // Once a Flash prompt or enhanced f/F repeat is active, it owns its
+      // continuation keys before app/user keymap routing. Unrelated keys from
+      // an f/F session still fall through and clear it when Vim moves.
+      if (
+        state.editorViewRef &&
+        isEditorFocused(state.editorViewRef) &&
+        handleVimFlashKey(state.editorViewRef, e)
+      ) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
+
       const userMappingMode = isEditorFocused(state.editorViewRef)
         ? userVimModeForEditor(state.editorViewRef, state.vimMode)
         : null
-      const userMappingToken = sequenceTokenToVimNotation(sequenceTokenFromEvent(e))
       const bufferedUserSequence = userMappingMode
         ? bufferedVimKeysForEditor(state.editorViewRef)
         : ''
+
+      // A literal argument or already-buffered Vim command owns its next key.
+      // Numeric buffers remain eligible so counts such as `2s` and `d2s` can
+      // start Flash, while `fs`, `rF`, `[s`, etc. reach CodeMirror-Vim intact.
+      if (
+        userMappingMode &&
+        !gTabPending.current &&
+        isVimAwaitingArgument(state.editorViewRef) &&
+        (!bufferedUserSequence || !/^\d+$/.test(bufferedUserSequence))
+      ) {
+        return
+      }
+
+      // Explicit init.mjs mappings own their complete buffered sequence while
+      // the main editor is focused. Yield before leader/pane/app routing so
+      // CodeMirror-Vim can dispatch its configured target.
+      const userMappingToken = sequenceTokenToVimNotation(sequenceTokenFromEvent(e))
       if (
         userMappingMode &&
         userMappingToken &&
@@ -484,6 +511,27 @@ export function VimNav(): JSX.Element | null {
               ) !== 'none'))
         )
       ) {
+        return
+      }
+
+      // The configurable Flash entry point is deliberately checked after
+      // explicit init.mjs mappings. A user's normal/visual/operator mapping
+      // therefore wins; unbinding this Settings action restores Vim's stock
+      // `s` command.
+      if (
+        (userMappingMode === 'n' || userMappingMode === 'v' || userMappingMode === 'o') &&
+        !leaderPending.current &&
+        !ctrlWPending.current &&
+        jumpTopPending.current === 0 &&
+        previousBufferPending.current === 0 &&
+        nextBufferPending.current === 0 &&
+        !gTabPending.current &&
+        matchesSequenceToken(e, overrides, 'vim.flashJump') &&
+        state.editorViewRef &&
+        startVimFlashJump(state.editorViewRef)
+      ) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
         return
       }
 

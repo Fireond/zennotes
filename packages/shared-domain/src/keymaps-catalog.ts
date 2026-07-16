@@ -79,6 +79,7 @@ export const KEYMAP_CATALOG: KeymapCatalogEntry[] = [
   { id: "vim.paneFocusRight", group: "vim", defaultBinding: "l", title: "Pane: focus right" },
   { id: "vim.paneSplitRight", group: "vim", defaultBinding: "v", title: "Pane: split right" },
   { id: "vim.paneSplitDown", group: "vim", defaultBinding: "s", title: "Pane: split down" },
+  { id: "vim.flashJump", group: "vim", defaultBinding: "s", title: "Flash jump" },
   { id: "vim.historyBack", group: "vim", defaultBinding: "Ctrl+O", title: "Go back in note history" },
   { id: "vim.historyForward", group: "vim", defaultBinding: "Ctrl+I", title: "Go forward in note history" },
   { id: "vim.bufferPrevious", group: "vim", defaultBinding: "[ b", title: "Previous buffer" },

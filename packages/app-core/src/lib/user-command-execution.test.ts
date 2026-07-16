@@ -117,6 +117,21 @@ describe('user command execution', () => {
     expect(run).toHaveBeenCalledOnce()
   })
 
+  it('routes vim.flashJump to the stable Flash command', async () => {
+    const run = vi.fn()
+    mocks.commands.push({ id: 'editor.flash.jump', title: 'Flash Jump', run })
+    const view = mount()
+
+    await executeUserVimCommand({
+      ...invocation(view),
+      commandId: 'vim.flashJump',
+      mode: 'n',
+      lhs: '<Space>j'
+    })
+
+    expect(run).toHaveBeenCalledOnce()
+  })
+
   it('supports the Settings command-palette action directly', async () => {
     const view = mount()
 

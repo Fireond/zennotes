@@ -48,6 +48,50 @@ zen.keymap.set('n', 'Q', null)
 
 `keymap.del(mode, lhs)` only deletes a declaration made earlier in the same `setup` call, so any underlying built-in behavior remains. Use `disable` when that underlying behavior should be replaced by a no-op.
 
+## Use Flash-style motions
+
+With Vim enabled in the main note editor, the `vim.flashJump` Settings action defaults to `s`. It is available in normal, visual, and operator-pending modes:
+
+1. Press `s` to open the jump prompt.
+2. Type one or more literal query characters. Matching is Unicode-aware and case-insensitive, so `abc` also finds `ABC`.
+3. When the intended match displays a label, type that label to jump to it.
+
+Matches closest to the cursor receive home-row labels first. A character that could still extend the current query is not assigned as a label, so you can type any number of query characters before choosing a target. `Backspace` removes the last query character, `Enter` selects the closest labeled match, and `Esc` or `Ctrl+[` cancels the prompt.
+
+The jump searches CodeMirror's current visible viewport ranges, not the entire note. Mounted inline and block math formulas are searchable by either their visible rendered text or their raw inner LaTeX. Every matching occurrence inside a formula receives its own label. ZenNotes places those labels approximately over nearby rendered glyphs without changing KaTeX's layout; resolving a raw-LaTeX match lands on that exact source occurrence and reveals the formula for editing. Rendered-only matches use the nearest approximate source token. If the viewport changes while the prompt is open, ZenNotes recomputes matches and labels for the newly visible ranges.
+
+You can change the default from `Settings -> Keymap` by searching for `Flash jump`. The equivalent portable `config.toml` override is:
+
+```toml
+[keymaps]
+"vim.flashJump" = "S"
+```
+
+Set the value to an empty string to unbind it:
+
+```toml
+[keymaps]
+"vim.flashJump" = ""
+```
+
+Unbinding this Settings action restores CodeMirror-Vim's original `s` substitute command. An explicit `init.mjs` mapping on the same key takes precedence over the Settings binding.
+
+The stable command ID is `editor.flash.jump`, so `init.mjs` can add the jump to a normal- or visual-mode Vim sequence:
+
+```js
+export default function setup(zen) {
+  zen.keymap.set('n', '<leader>j', zen.command('editor.flash.jump'))
+}
+```
+
+This adds another way to start Flash. Unbind `vim.flashJump` in Settings or `config.toml` as shown above if you want to move the command instead of keeping the default `s` binding.
+
+The Settings binding also works after an operator (`ds`, for example). Command-style `init.mjs` mappings are not dispatched by CodeMirror-Vim while an operator is pending, so map `editor.flash.jump` in normal or visual mode rather than `o` mode. Query and label keystrokes are handled by the Flash UI and are not currently replayable with Vim macros or dot-repeat.
+
+The ordinary same-line `f{character}` and `F{character}` motions are enhanced separately. After a successful motion, ZenNotes highlights every occurrence of that character on the current line. Press lowercase `f` to continue in the original search direction, or uppercase `F` to move to the preceding match and undo a jump. For example, after an initial backward `F{x}`, `f` continues backward and `F` reverses forward.
+
+Character-motion highlights clear after another cursor or selection movement, a document edit, a note or buffer switch, focus leaving the editor, or `Esc`/`Ctrl+[`. Unlike the labeled `s` jump, enhanced `f/F` remains scoped to the current line.
+
 ## Run ZenNotes commands from Vim
 
 A mapping can invoke an existing ZenNotes action by its Settings keymap ID or stable command-palette ID:
@@ -60,7 +104,7 @@ export default function setup(zen) {
 }
 ```
 
-Settings keymap IDs with direct command equivalents are accepted, including `global.commandPalette`, `global.openSettings`, `global.newQuickNote`, `global.modeEdit`, `global.modeSplit`, `global.modePreview`, `global.historyBack`, `global.historyForward`, the `global.focusPane*` actions, the `vim.pane*` actions, and the `vim.fold*` actions. Stable command-palette IDs such as `app.settings`, `note.new.quick`, `tab.close`, and `view.mode.edit` also work. Command execution uses the editor and pane that received the Vim mapping.
+Settings keymap IDs with direct command equivalents are accepted, including `global.commandPalette`, `global.openSettings`, `global.newQuickNote`, `global.modeEdit`, `global.modeSplit`, `global.modePreview`, `global.historyBack`, `global.historyForward`, `vim.flashJump`, the `global.focusPane*` actions, the `vim.pane*` actions, and the `vim.fold*` actions. Stable command-palette IDs such as `app.settings`, `editor.flash.jump`, `note.new.quick`, `tab.close`, and `view.mode.edit` also work. Command execution uses the editor and pane that received the Vim mapping.
 
 The generated `config.toml` lists every Settings action ID in its `[keymaps]` section. Some entries are prefixes or context-only navigation keys rather than invokable actions; using one of those as a command target produces an `Unknown command` error.
 

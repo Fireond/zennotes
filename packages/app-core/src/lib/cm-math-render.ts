@@ -29,7 +29,11 @@ const BLOCK_MATH_RE = /\$\$(?!\$)([\s\S]+?)\$\$/g
 
 function renderKatex(el: HTMLElement, latex: string, display: boolean): void {
   try {
-    katex.render(latex.trim(), el, { displayMode: display, throwOnError: false, output: 'html' })
+    katex.render(latex.trim(), el, {
+      displayMode: display,
+      throwOnError: false,
+      output: 'html'
+    })
   } catch {
     el.textContent = display ? `$$${latex}$$` : `$${latex}$`
     el.classList.add('cm-math-error')
@@ -37,15 +41,25 @@ function renderKatex(el: HTMLElement, latex: string, display: boolean): void {
 }
 
 class InlineMathWidget extends WidgetType {
-  constructor(readonly latex: string) {
+  constructor(
+    readonly latex: string,
+    /** Offset from the replacement range start to `latex` in the document. */
+    readonly sourceOffset: number
+  ) {
     super()
   }
   eq(other: InlineMathWidget): boolean {
-    return other.latex === this.latex
+    return other.latex === this.latex && other.sourceOffset === this.sourceOffset
   }
   toDOM(): HTMLElement {
     const el = document.createElement('span')
     el.className = 'cm-math-inline'
+    // Replacement widgets hide their document range from CodeMirror's
+    // `visibleRanges`. Keep the original formula on the opaque widget so
+    // view-level features such as Vim Flash can still search it without
+    // parsing KaTeX's generated DOM back into LaTeX.
+    el.dataset.mathSource = this.latex
+    el.dataset.mathSourceOffset = String(this.sourceOffset)
     renderKatex(el, this.latex, false)
     return el
   }
@@ -55,15 +69,21 @@ class InlineMathWidget extends WidgetType {
 }
 
 class BlockMathWidget extends WidgetType {
-  constructor(readonly latex: string) {
+  constructor(
+    readonly latex: string,
+    /** Offset from the replacement range start to `latex` in the document. */
+    readonly sourceOffset: number
+  ) {
     super()
   }
   eq(other: BlockMathWidget): boolean {
-    return other.latex === this.latex
+    return other.latex === this.latex && other.sourceOffset === this.sourceOffset
   }
   toDOM(): HTMLElement {
     const el = document.createElement('div')
     el.className = 'cm-math-block'
+    el.dataset.mathSource = this.latex
+    el.dataset.mathSourceOffset = String(this.sourceOffset)
     renderKatex(el, this.latex, true)
     return el
   }
@@ -131,7 +151,10 @@ function buildMathRender(state: EditorState): MathRenderValue {
     pending.push({
       from: openLine.from,
       to: closeLine.to,
-      deco: Decoration.replace({ block: true, widget: new BlockMathWidget(inner) })
+      deco: Decoration.replace({
+        block: true,
+        widget: new BlockMathWidget(inner, rawFrom + 2 - openLine.from)
+      })
     })
   }
 
@@ -152,7 +175,11 @@ function buildMathRender(state: EditorState): MathRenderValue {
       if (insideBlock(from, to)) continue
       if (isInsideCode(state, from + 1)) continue
       if (selectionTouches(state, from, to)) continue
-      pending.push({ from, to, deco: Decoration.replace({ widget: new InlineMathWidget(inner) }) })
+      pending.push({
+        from,
+        to,
+        deco: Decoration.replace({ widget: new InlineMathWidget(inner, 1) })
+      })
     }
   }
 
