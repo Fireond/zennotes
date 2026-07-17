@@ -43,6 +43,7 @@ import { slashCommandSource, slashCommandRender } from '../lib/cm-slash-commands
 import { calloutTypeSource } from '../lib/cm-callouts'
 import { dateShortcutSource } from '../lib/cm-date-shortcuts'
 import { wikilinkSource, wikilinkHeadingSource } from '../lib/cm-wikilinks'
+import { hashtagSource } from '../lib/cm-hashtag-complete'
 import { completionNavKeymap } from '../lib/cm-completion-nav'
 import { classifyLocalAssetHref, hrefFragment, type LocalAssetKind } from '../lib/local-assets'
 import { LazyPreview as Preview } from './LazyPreview'
@@ -207,6 +208,7 @@ export function PinnedReferencePane(): JSX.Element | null {
               slashCommandSource,
               calloutTypeSource,
               dateShortcutSource,
+              hashtagSource,
               wikilinkSource,
               wikilinkHeadingSource
             ],
