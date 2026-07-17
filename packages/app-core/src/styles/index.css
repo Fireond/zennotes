@@ -1847,8 +1847,15 @@ html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done {
   text-decoration: line-through;
   text-decoration-color: rgb(var(--z-grey-0));
 }
+/* Gray must also target the token spans CodeMirror nests inside `.cm-task-done`
+   (e.g. `.tok-list`): they carry their own syntax-highlight `color`, which wins
+   over a `color` set only on the parent, so without the descendant selector the
+   text kept its normal color and only strikethrough (which propagates) showed.
+   (#414) */
 html[data-completed-task-style="gray"] .cm-editor .cm-task-done,
-html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done {
+html[data-completed-task-style="gray"] .cm-editor .cm-task-done *,
+html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done,
+html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done * {
   color: rgb(var(--z-grey-0)) !important;
 }
 
