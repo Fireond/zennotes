@@ -24,6 +24,7 @@ import { useStore } from '../store'
 import { parseFrontmatter, slugifyTemplateName } from '@shared/template-files'
 import { renderTemplate } from '../lib/template-render'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
+import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
 import { templateVariableSource, TEMPLATE_VARIABLES } from '../lib/cm-template-variables'
@@ -128,6 +129,7 @@ export function TemplateEditorModal({
           content: markdown({
             base: markdownLanguage,
             codeLanguages: resolveCodeLanguage,
+            extensions: mathMarkdownSyntax,
             addKeymap: false
           })
         }),

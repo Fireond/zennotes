@@ -53,6 +53,7 @@ import {
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { isImeComposing } from '../lib/ime'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
+import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { forwardOnCheckboxArrow } from '../lib/cm-forward-task'
 import { completionNavKeymap } from '../lib/cm-completion-nav'
@@ -328,7 +329,12 @@ function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extens
 
 function markdownEditingExtensions(): Extension[] {
   return [
-    markdown({ base: markdownLanguage, codeLanguages: resolveCodeLanguage, addKeymap: false }),
+    markdown({
+      base: markdownLanguage,
+      codeLanguages: resolveCodeLanguage,
+      extensions: mathMarkdownSyntax,
+      addKeymap: false
+    }),
     vimAwareMarkdownKeymap,
     markdownListIndentPlugin,
     frontmatterStyle,

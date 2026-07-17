@@ -17,6 +17,7 @@ import {
   WidgetType
 } from '@codemirror/view'
 import { calloutGroupFor } from './callout-types'
+import { mathSourceRanges, rangeIsInsideMathSource } from './cm-math-render'
 /** Line number (1-based) of the closing `---` of leading YAML frontmatter,
  *  or -1 when there is none. Lets us leave the frontmatter fences to the
  *  frontmatter styling rather than rendering them as horizontal rules.
@@ -120,6 +121,7 @@ type Pending = { from: number; to: number; deco: Decoration; line: boolean }
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view
   const active = activeLineSet(view)
+  const rawMathRanges = mathSourceRanges(state)
   const pending: Pending[] = []
   const quotedLines = new Set<number>()
   // The properties widget owns the leading frontmatter (its `---` fences parse
@@ -132,6 +134,10 @@ function buildDecorations(view: EditorView): DecorationSet {
       from,
       to,
       enter: (node) => {
+        // Raw LaTeX must not masquerade as lists, quotes, or rules (for example
+        // `* x`). The math grammar normally makes it opaque; the renderer's
+        // exact ranges also protect it during incremental parsing.
+        if (rangeIsInsideMathSource(rawMathRanges, node.from, node.to)) return false
         if (node.name === 'Blockquote') {
           const first = state.doc.lineAt(node.from).number
           const last = state.doc.lineAt(Math.max(node.from, node.to - 1)).number

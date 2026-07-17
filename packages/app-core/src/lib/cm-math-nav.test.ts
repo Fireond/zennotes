@@ -7,6 +7,7 @@ import { Vim, getCM, vim } from '@replit/codemirror-vim'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mathBlockArrowKeymap } from './cm-math-nav'
 import { mathBlockLineRanges, mathRenderExtension } from './cm-math-render'
+import { mathMarkdownSyntax } from './cm-math-syntax'
 import { tikzBlockLineRanges, tikzRenderExtension } from './cm-tikz-render'
 import { registerDisplayLineMotion } from './cm-vim-display-line'
 
@@ -49,7 +50,7 @@ describe('keyboard navigation into rendered live-preview blocks', () => {
         selection: { anchor },
         extensions: [
           ...(withVim ? [vim()] : []),
-          markdown({ base: markdownLanguage }),
+          markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
           ...renderExtensions,
           keymap.of([...mathBlockArrowKeymap])
         ]
@@ -90,7 +91,10 @@ describe('keyboard navigation into rendered live-preview blocks', () => {
       parent: document.body,
       state: EditorState.create({
         doc: 'I paid $5 and got $10 back.',
-        extensions: [markdown({ base: markdownLanguage }), mathRenderExtension]
+        extensions: [
+          markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
+          mathRenderExtension
+        ]
       })
     })
     views.push(plain)

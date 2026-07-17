@@ -64,6 +64,15 @@ describe('editor and preview typography rhythm', () => {
     )
   })
 
+  it('neutralizes Markdown italic styling only inside revealed math source', () => {
+    expect(stylesSource).toMatch(
+      /\.cm-wysiwyg \.cm-editor \.cm-math-source,\s*\.cm-wysiwyg \.cm-editor \.cm-math-source \*\s*\{[^}]*font-style:\s*normal\s*!important;/s
+    )
+    expect(stylesSource).toMatch(
+      /\.cm-editor \.tok-emphasis\s*\{[^}]*font-style:\s*italic;/s
+    )
+  })
+
   it('keeps search match highlights visible inside code blocks and inline code', () => {
     // Theme-aware background so the match shows against paper/dark themes.
     expect(stylesSource).toMatch(

@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { forceParsing, HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
+import { tags as t } from '@lezer/highlight'
 import { describe, expect, it, vi } from 'vitest'
 import { livePreviewPlugin } from './cm-live-preview'
+import { mathRenderExtension } from './cm-math-render'
+import { mathMarkdownSyntax } from './cm-math-syntax'
+import { wysiwygBlocksPlugin } from './cm-wysiwyg-blocks'
 import { useStore } from '../store'
 
 vi.mock('../store', () => {
@@ -24,6 +29,10 @@ vi.mock('../store', () => {
   return { useStore }
 })
 
+const emphasisTestHighlight = HighlightStyle.define([
+  { tag: t.emphasis, class: 'tok-emphasis' }
+])
+
 function mountEditor(doc: string, anchor: number): EditorView {
   const parent = document.createElement('div')
   document.body.append(parent)
@@ -35,6 +44,37 @@ function mountEditor(doc: string, anchor: number): EditorView {
       extensions: [markdown({ base: markdownLanguage }), livePreviewPlugin]
     })
   })
+}
+
+function mountMathEditor(doc: string, anchor: number): EditorView {
+  const parent = document.createElement('div')
+  document.body.append(parent)
+  const view = new EditorView({
+    parent,
+    state: EditorState.create({
+      doc,
+      selection: { anchor },
+      extensions: [
+        markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
+        syntaxHighlighting(emphasisTestHighlight),
+        livePreviewPlugin,
+        wysiwygBlocksPlugin,
+        mathRenderExtension
+      ]
+    })
+  })
+  forceParsing(view, doc.length, 5000)
+  // Rebuild both decoration providers after the syntax tree is complete.
+  view.dispatch({ changes: { from: doc.length, insert: ' ' } })
+  view.dispatch({ changes: { from: doc.length, to: doc.length + 1 } })
+  return view
+}
+
+function editorLineTexts(view: EditorView): string[] {
+  return Array.from(
+    view.dom.querySelectorAll<HTMLElement>('.cm-line'),
+    (line) => line.textContent ?? ''
+  )
 }
 
 describe('livePreviewPlugin', () => {
@@ -81,6 +121,85 @@ describe('livePreviewPlugin', () => {
 
     expect(view.dom.textContent).toContain('# Code blocks')
 
+    view.destroy()
+  })
+
+  it('keeps every asterisk visible in revealed multiline math source', () => {
+    const doc = [
+      '*ordinary italic*',
+      '**ordinary bold**',
+      '',
+      '$$',
+      '* x',
+      'x^{*} + y^{*}',
+      'z^{*} + w^{*}',
+      '$$'
+    ].join('\n')
+    // Entering the opening fence reveals the whole block, including formula
+    // lines that are not themselves the active Markdown line.
+    const view = mountMathEditor(doc, doc.indexOf('$$') + 1)
+    const lines = editorLineTexts(view)
+
+    expect(view.dom.querySelector('.cm-math-block')).toBeNull()
+    expect(view.dom.querySelector('.cm-math-edit-preview-block')).not.toBeNull()
+    expect(lines).toContain('* x')
+    expect(lines).toContain('x^{*} + y^{*}')
+    expect(lines).toContain('z^{*} + w^{*}')
+    // Normal Markdown outside math must keep its existing concealment.
+    expect(lines).toContain('ordinary italic')
+    expect(lines).not.toContain('*ordinary italic*')
+    expect(lines).toContain('ordinary bold')
+    expect(lines).not.toContain('**ordinary bold**')
+    // Formula contents are opaque to the Markdown parser, so LaTeX stars never
+    // receive emphasis highlighting in the first place.
+    expect(
+      view.dom.querySelector(
+        '.cm-math-source.tok-emphasis, .cm-math-source .tok-emphasis, .tok-emphasis .cm-math-source'
+      )
+    ).toBeNull()
+    const ordinaryEmphasis = Array.from(
+      view.dom.querySelectorAll<HTMLElement>('.tok-emphasis')
+    ).find((element) => element.textContent?.includes('ordinary italic'))
+    expect(ordinaryEmphasis).toBeDefined()
+    expect(ordinaryEmphasis?.closest('.cm-math-source')).toBeNull()
+    view.destroy()
+  })
+
+  it('does not let emphasis leak from one block formula into prose before the next', () => {
+    const doc = String.raw`$$
+H^*(X,\{x\_0\};R) \otimes\_R H^*(Y,\{y_0\};R) \xrightarrow{\times} H^*(X\times Y,\{x_0\}\times Y \cup X \times\{y_0\};R),
+$$
+so we get an isomorphism
+$$
+\tilde{H}^*(X ;R) \otimes\_R \tilde{H}^*(Y ;R) \xrightarrow{\times}\tilde{H}^*(X \land Y ;R)
+$$
+
+*ordinary emphasis*`
+    const view = mountMathEditor(doc, doc.indexOf('H^*') + 2)
+    const proseLine = Array.from(view.dom.querySelectorAll<HTMLElement>('.cm-line')).find(
+      (line) => line.textContent === 'so we get an isomorphism'
+    )
+    const ordinaryEmphasis = Array.from(
+      view.dom.querySelectorAll<HTMLElement>('.tok-emphasis')
+    ).find((element) => element.textContent?.includes('ordinary emphasis'))
+
+    expect(proseLine).toBeDefined()
+    expect(proseLine?.matches('.tok-emphasis')).toBe(false)
+    expect(proseLine?.querySelector('.tok-emphasis')).toBeNull()
+    expect(proseLine?.closest('.tok-emphasis')).toBeNull()
+    expect(ordinaryEmphasis).toBeDefined()
+    view.destroy()
+  })
+
+  it('keeps asterisks visible in active inline math source', () => {
+    const doc = '**ordinary bold**\n\nInline $x^{*} + y^{*}$ here'
+    const view = mountMathEditor(doc, doc.indexOf('x^{*}'))
+    const lines = editorLineTexts(view)
+
+    expect(view.dom.querySelector('.cm-math-inline')).toBeNull()
+    expect(view.dom.querySelector('.cm-math-edit-preview-inline')).not.toBeNull()
+    expect(lines).toContain('Inline $x^{*} + y^{*}$ here')
+    expect(lines).toContain('ordinary bold')
     view.destroy()
   })
 

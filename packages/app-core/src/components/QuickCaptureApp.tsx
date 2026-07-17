@@ -50,6 +50,7 @@ import { registerDisplayLineMotion } from '../lib/cm-vim-display-line'
 import { inlineFormatKeymap } from '../lib/cm-inline-format-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
+import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language'
@@ -443,7 +444,12 @@ export function QuickCaptureApp(): JSX.Element {
           drawSelection(),
           highlightActiveLine(),
           EditorView.lineWrapping,
-          markdown({ base: markdownLanguage, codeLanguages: resolveCodeLanguage, addKeymap: false }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: resolveCodeLanguage,
+            extensions: mathMarkdownSyntax,
+            addKeymap: false
+          }),
           vimAwareMarkdownKeymap,
           markdownListIndentPlugin,
           syntaxHighlighting(captureHighlight),

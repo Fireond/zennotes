@@ -28,6 +28,7 @@ import katex from 'katex'
 const INLINE_MATH_RE = /(?<![\\$])\$(?!\s)(?!\$)((?:\\.|[^$\\])+?)(?<!\s)\$(?!\$)/g
 // Block `$$…$$`, shortest match, may span lines.
 const BLOCK_MATH_RE = /\$\$(?!\$)([\s\S]+?)\$\$/g
+const revealedMathSource = Decoration.mark({ class: 'cm-math-source' })
 
 function renderKatex(el: HTMLElement, latex: string, display: boolean): void {
   try {
@@ -149,16 +150,43 @@ export interface MathBlockLineRange {
   toLine: number
 }
 
+/** Exact document span of one recognized `$…$` or `$$…$$` expression. */
+export interface MathSourceRange {
+  from: number
+  to: number
+  kind: MathKind
+}
+
+/** Whether `[from, to]` belongs wholly to one sorted math-source range. */
+export function rangeIsInsideMathSource(
+  ranges: readonly MathSourceRange[],
+  from: number,
+  to: number
+): boolean {
+  let low = 0
+  let high = ranges.length
+  while (low < high) {
+    const mid = (low + high) >> 1
+    if (ranges[mid].from <= from) low = mid + 1
+    else high = mid
+  }
+  const candidate = ranges[low - 1]
+  return candidate !== undefined && to <= candidate.to
+}
+
 interface MathRenderValue {
   decorations: DecorationSet
   /** Every block-math range, whether currently rendered or revealed. */
   blockLines: readonly MathBlockLineRange[]
+  /** Every formula's raw source, delimiters included. */
+  sourceRanges: readonly MathSourceRange[]
 }
 
 function buildMathRender(state: EditorState): MathRenderValue {
   const pending: Array<{ from: number; to: number; deco: Decoration }> = []
   const consumed: Array<[number, number]> = []
   const blockLines: MathBlockLineRange[] = []
+  const sourceRanges: MathSourceRange[] = []
   const doc = state.doc
   const text = doc.toString()
 
@@ -183,7 +211,9 @@ function buildMathRender(state: EditorState): MathRenderValue {
     // block ends up rendered or revealed.
     consumed.push([openLine.from, closeLine.to])
     blockLines.push({ fromLine: openLine.number, toLine: closeLine.number })
+    sourceRanges.push({ from: rawFrom, to: rawTo, kind: 'block' })
     if (selectionTouches(state, openLine.from, closeLine.to)) {
+      pending.push({ from: rawFrom, to: rawTo, deco: revealedMathSource })
       if (primaryHeadTouches(state, openLine.from, closeLine.to)) {
         // A proper block widget supplied by this StateField participates in
         // CodeMirror's height map. Anchoring it after the closing-fence line
@@ -226,7 +256,9 @@ function buildMathRender(state: EditorState): MathRenderValue {
       const to = from + im[0].length
       if (insideBlock(from, to)) continue
       if (isInsideCode(state, from + 1)) continue
+      sourceRanges.push({ from, to, kind: 'inline' })
       if (selectionTouches(state, from, to)) {
+        pending.push({ from, to, deco: revealedMathSource })
         if (primaryHeadTouches(state, from, to)) {
           // Inline formulas keep their source in the surrounding line. Put the
           // preview after that line so it never splits or obscures prose.
@@ -251,9 +283,10 @@ function buildMathRender(state: EditorState): MathRenderValue {
   }
 
   pending.sort((a, b) => a.from - b.from || a.to - b.to)
+  sourceRanges.sort((a, b) => a.from - b.from || a.to - b.to)
   const builder = new RangeSetBuilder<Decoration>()
   for (const p of pending) builder.add(p.from, p.to, p.deco)
-  return { decorations: builder.finish(), blockLines }
+  return { decorations: builder.finish(), blockLines, sourceRanges }
 }
 
 const mathRenderField = StateField.define<MathRenderValue>({
@@ -278,6 +311,15 @@ const mathRenderField = StateField.define<MathRenderValue>({
  */
 export function mathBlockLineRanges(state: EditorState): readonly MathBlockLineRange[] {
   return state.field(mathRenderField, false)?.blockLines ?? []
+}
+
+/**
+ * Exact raw spans recognized by the active math renderer. Live-preview
+ * Markdown transforms use this to leave LaTeX source literal while a formula
+ * is revealed for editing.
+ */
+export function mathSourceRanges(state: EditorState): readonly MathSourceRange[] {
+  return state.field(mathRenderField, false)?.sourceRanges ?? []
 }
 
 export const mathRenderExtension: Extension = [mathRenderField]

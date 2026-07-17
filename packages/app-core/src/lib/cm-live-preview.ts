@@ -22,6 +22,7 @@ import {
   parseEmbedSizeHint,
   resolveExcalidrawEmbedPath
 } from './excalidraw-preview'
+import { mathSourceRanges, rangeIsInsideMathSource } from './cm-math-render'
 
 /**
  * Live-preview extension: hides markdown syntax markers on lines where
@@ -758,6 +759,14 @@ class ForwardedMarkerWidget extends WidgetType {
 
 function computeDecorations(view: EditorView): DecorationSet {
   const { state } = view
+  const rawMathRanges = mathSourceRanges(state)
+  const blockMathLines = new Set<number>()
+  for (const range of rawMathRanges) {
+    if (range.kind !== 'block') continue
+    const first = state.doc.lineAt(range.from).number
+    const last = state.doc.lineAt(range.to).number
+    for (let line = first; line <= last; line++) blockMathLines.add(line)
+  }
 
   // Every line that holds part of a selection range is "active" and
   // therefore keeps its syntax markers visible for editing.
@@ -776,6 +785,9 @@ function computeDecorations(view: EditorView): DecorationSet {
     const lastLine = state.doc.lineAt(Math.max(from, to - 1)).number
     for (let lineNo = firstLine; lineNo <= lastLine; lineNo++) {
       if (replacedLines.has(lineNo)) continue
+      // A revealed formula is source, not Markdown. In particular, LaTeX that
+      // resembles a standalone image/task must not become a live-preview widget.
+      if (blockMathLines.has(lineNo)) continue
       // Image / PDF lines still render their preview widget even when
       // the cursor is on the line. We only suppress `imageSourceHide`
       // so the raw markdown text shows alongside the widget — matching
@@ -916,6 +928,11 @@ function computeDecorations(view: EditorView): DecorationSet {
       to,
       enter: (node) => {
         const name = node.name
+
+        // Formula source is literal LaTeX, not Markdown. The configured math
+        // grammar normally makes it opaque; this range guard also keeps it raw
+        // while CodeMirror is incrementally rebuilding the syntax tree.
+        if (rangeIsInsideMathSource(rawMathRanges, node.from, node.to)) return false
 
         // #316: `[>]` at the start of a list item is a forwarded-task marker.
         // CM parses it as a broken link; render an arrow (off the active line)

@@ -4746,6 +4746,13 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 .cm-wysiwyg .cm-editor .cm-math-edit-preview .katex-display {
   margin: 0;
 }
+/* Revealed math is raw LaTeX. Keep it typographically literal even when the
+   entire formula appears inside surrounding Markdown emphasis; formula-internal
+   delimiters are kept opaque by the editor's math grammar. */
+.cm-wysiwyg .cm-editor .cm-math-source,
+.cm-wysiwyg .cm-editor .cm-math-source * {
+  font-style: normal !important;
+}
 .cm-wysiwyg .cm-editor .cm-math-error {
   font-family: var(--z-font-mono, ui-monospace, monospace);
   opacity: 0.75;

@@ -22,6 +22,7 @@ import {
 } from '../lib/cm-vim-default-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
+import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
 import { applyVimInsertEscape } from '../lib/vim-insert-escape'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
@@ -120,7 +121,12 @@ export function ExternalFileApp(): JSX.Element {
           drawSelection(),
           highlightActiveLine(),
           prefs.wordWrap ? EditorView.lineWrapping : [],
-          markdown({ base: markdownLanguage, codeLanguages: resolveCodeLanguage, addKeymap: false }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: resolveCodeLanguage,
+            extensions: mathMarkdownSyntax,
+            addKeymap: false
+          }),
           vimAwareMarkdownKeymap,
           markdownListIndentPlugin,
           headingFolding(),

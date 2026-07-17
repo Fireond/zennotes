@@ -3,6 +3,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorState, type Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { mathRenderExtension } from './cm-math-render'
+import { mathMarkdownSyntax } from './cm-math-syntax'
 import { tikzRenderExtension } from './cm-tikz-render'
 import { zenMoveByDisplayLine } from './cm-vim-display-line'
 
@@ -84,7 +85,10 @@ describe('zenMoveByDisplayLine around rendered live-preview blocks', () => {
   ): { res: { line: number; ch: number }; findPosV: ReturnType<typeof vi.fn> } {
     const state = EditorState.create({
       doc,
-      extensions: [markdown({ base: markdownLanguage }), renderExtension]
+      extensions: [
+        markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
+        renderExtension
+      ]
     })
     const findPosV = vi.fn(() => findPosVResult)
     const cm = {

@@ -13,6 +13,7 @@ import {
   vimFlashExtension
 } from './cm-vim-flash'
 import { mathRenderExtension } from './cm-math-render'
+import { mathMarkdownSyntax } from './cm-math-syntax'
 
 type RenderedTarget = { label: string; position: number }
 
@@ -51,7 +52,10 @@ describe('Vim Flash integration', () => {
   }
 
   function mountMath(doc: string, anchor = 0): EditorView {
-    const view = mount(doc, anchor, [markdown({ base: markdownLanguage }), mathRenderExtension])
+    const view = mount(doc, anchor, [
+      markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
+      mathRenderExtension
+    ])
     forceParsing(view, doc.length, 5000)
     // Rebuild math decorations after the Markdown parser has completed.
     view.dispatch({ changes: { from: doc.length, insert: ' ' } })
@@ -374,7 +378,7 @@ describe('Vim Flash integration', () => {
       const doc = 'start $ABCD$ end'
       const math = new Compartment()
       const view = mount(doc, 0, [
-        markdown({ base: markdownLanguage }),
+        markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
         math.of(mathRenderExtension)
       ])
       forceParsing(view, doc.length, 5000)

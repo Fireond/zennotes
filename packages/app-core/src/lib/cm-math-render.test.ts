@@ -6,6 +6,7 @@ import { EditorState, type EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
 import { mathRenderExtension } from './cm-math-render'
+import { mathMarkdownSyntax } from './cm-math-syntax'
 
 function mount(doc: string, selection?: EditorSelection | { anchor: number }): EditorView {
   const parent = document.createElement('div')
@@ -15,7 +16,10 @@ function mount(doc: string, selection?: EditorSelection | { anchor: number }): E
     state: EditorState.create({
       doc,
       selection: selection ?? { anchor: 0 },
-      extensions: [markdown({ base: markdownLanguage }), mathRenderExtension]
+      extensions: [
+        markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
+        mathRenderExtension
+      ]
     })
   })
   forceParsing(view, doc.length, 5000)
