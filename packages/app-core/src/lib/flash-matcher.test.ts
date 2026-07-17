@@ -7,8 +7,8 @@ import {
 } from './flash-matcher'
 
 describe('findFlashMatches', () => {
-  it('matches a literal query case-insensitively and includes overlaps', () => {
-    expect(findFlashMatches('AaAaA', 'AaA', [{ from: 0, to: 5 }])).toEqual([
+  it('matches a lowercase literal query case-insensitively and includes overlaps', () => {
+    expect(findFlashMatches('AaAaA', 'aaa', [{ from: 0, to: 5 }])).toEqual([
       { from: 0, to: 3 },
       { from: 1, to: 4 },
       { from: 2, to: 5 }
@@ -20,6 +20,26 @@ describe('findFlashMatches', () => {
       { from: 4, to: 7 },
       { from: 8, to: 11 }
     ])
+  })
+
+  it('uses smart case when the query contains an uppercase letter', () => {
+    expect(findFlashMatches('a A', 'a', [{ from: 0, to: 3 }])).toEqual([
+      { from: 0, to: 1 },
+      { from: 2, to: 3 }
+    ])
+    expect(findFlashMatches('a A', 'A', [{ from: 0, to: 3 }])).toEqual([{ from: 2, to: 3 }])
+
+    const text = 'abc ABC Abc aBc'
+    const ranges = [{ from: 0, to: text.length }]
+
+    expect(findFlashMatches(text, 'abc', ranges)).toEqual([
+      { from: 0, to: 3 },
+      { from: 4, to: 7 },
+      { from: 8, to: 11 },
+      { from: 12, to: 15 }
+    ])
+    expect(findFlashMatches(text, 'ABC', ranges)).toEqual([{ from: 4, to: 7 }])
+    expect(findFlashMatches(text, 'aBc', ranges)).toEqual([{ from: 12, to: 15 }])
   })
 
   it('treats regular-expression syntax in the query as literal text', () => {
@@ -98,6 +118,24 @@ describe('findFlashMatches', () => {
       { from: 6, to: 8 },
       { from: 9, to: 11 }
     ])
+
+    expect(findFlashMatches(text, 'S', [{ from: 0, to: text.length }])).toEqual([
+      { from: 1, to: 2 },
+      { from: 3, to: 4 },
+      { from: 4, to: 5 }
+    ])
+    expect(findFlashMatches(text, 'K', [{ from: 0, to: text.length }])).toEqual([
+      { from: 6, to: 7 }
+    ])
+
+    const titleCase = 'ǅǆ'
+    expect(findFlashMatches(titleCase, 'ǆ', [{ from: 0, to: titleCase.length }])).toEqual([
+      { from: 0, to: 1 },
+      { from: 1, to: 2 }
+    ])
+    expect(findFlashMatches(titleCase, 'ǅ', [{ from: 0, to: titleCase.length }])).toEqual([
+      { from: 0, to: 1 }
+    ])
   })
 
   it('does not let a range boundary inside a surrogate pair escape the range', () => {
@@ -113,7 +151,7 @@ describe('assignFlashLabels', () => {
   it('excludes every character that could continue the current query', () => {
     const text = 'aB aC aD aZ aſ'
     const matches = findFlashMatches(text, 'a', [{ from: 0, to: text.length }])
-    const targets = assignFlashLabels(text, matches, 0)
+    const targets = assignFlashLabels(text, 'a', matches, 0)
     const labels = targets.map((target) => target.label)
 
     expect(labels).not.toContain('b')
@@ -128,7 +166,7 @@ describe('assignFlashLabels', () => {
     const text = 'x---x---x---x'
     const matches = findFlashMatches(text, 'x', [{ from: 0, to: text.length }])
 
-    expect(assignFlashLabels(text, matches, 9)).toEqual([
+    expect(assignFlashLabels(text, 'x', matches, 9)).toEqual([
       { from: 8, to: 9, label: 'a' },
       { from: 12, to: 13, label: 's' },
       { from: 4, to: 5, label: 'd' },
@@ -155,7 +193,7 @@ describe('assignFlashLabels', () => {
     const text = 'ax ay'
     const matches = findFlashMatches(text, 'a', [{ from: 0, to: text.length }])
 
-    expect(assignFlashLabels(text, matches, 0, new Map([[0, 'x']]))).toEqual([
+    expect(assignFlashLabels(text, 'a', matches, 0, new Map([[0, 'x']]))).toEqual([
       { from: 0, to: 1, label: 'a' },
       { from: 3, to: 4, label: 's' }
     ])
@@ -164,13 +202,45 @@ describe('assignFlashLabels', () => {
   it('withholds continuation characters supplied by virtual targets', () => {
     const text = 'x x'
     const matches = findFlashMatches(text, 'x', [{ from: 0, to: text.length }])
-    const labels = assignFlashLabels(text, matches, 0, new Map(), [
+    const labels = assignFlashLabels(text, 'x', matches, 0, new Map(), [
       'A',
       'ſ'
     ]).map((target) => target.label)
 
     expect(labels).not.toContain('a')
     expect(labels).not.toContain('s')
+
+    const uppercaseMatches = findFlashMatches('X X', 'X', [{ from: 0, to: 3 }])
+    const uppercaseLabels = assignFlashLabels('X X', 'X', uppercaseMatches, 0, new Map(), [
+      'A'
+    ]).map((target) => target.label)
+    expect(uppercaseLabels).toContain('a')
+  })
+
+  it('reserves continuation labels according to the query smart-case mode', () => {
+    const uppercaseText = 'XA XA'
+    const uppercaseMatches = findFlashMatches(uppercaseText, 'X', [
+      { from: 0, to: uppercaseText.length }
+    ])
+    const uppercaseLabels = assignFlashLabels(uppercaseText, 'X', uppercaseMatches, 0).map(
+      (target) => target.label
+    )
+
+    // Uppercase A refines the exact-case query; lowercase a remains an
+    // unambiguous label key.
+    expect(uppercaseLabels).toContain('a')
+
+    const lowercaseText = 'xA xa'
+    const lowercaseMatches = findFlashMatches(lowercaseText, 'x', [
+      { from: 0, to: lowercaseText.length }
+    ])
+    const lowercaseLabels = assignFlashLabels(lowercaseText, 'x', lowercaseMatches, 0).map(
+      (target) => target.label
+    )
+
+    // A lowercase query ignores case, so either A/a can be continued by the
+    // lowercase key and must reserve that key from the label alphabet.
+    expect(lowercaseLabels).not.toContain('a')
   })
 
   it('uses only the single-character Flash label alphabet', () => {

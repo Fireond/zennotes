@@ -9,7 +9,7 @@ import {
   WidgetType
 } from '@codemirror/view'
 import { Vim, getCM } from '@replit/codemirror-vim'
-import type { CodeMirrorV } from '@replit/codemirror-vim'
+import type { CodeMirrorV, MotionArgs, Pos } from '@replit/codemirror-vim'
 import { getStyleTags, type Tag } from '@lezer/highlight'
 import {
   assignFlashLabels,
@@ -127,21 +127,44 @@ function sourceHighlightClasses(view: EditorView, offset: number): string {
   return classes ? [...new Set(classes.split(/\s+/).filter(Boolean))].join(' ') : ''
 }
 
-function findExactCharacterPositions(
+function findSmartCaseCharacterPositions(
   text: string,
   character: string,
   from: number,
   to: number
 ): number[] {
-  if (!character) return []
-  const positions: number[] = []
-  let position = text.indexOf(character, from)
-  while (position >= from && position + character.length <= to) {
-    positions.push(position)
-    position = text.indexOf(character, position + character.length)
-  }
-  return positions
+  return findFlashMatches(text, character, [{ from, to }]).map((match) => match.from)
 }
+
+/**
+ * Replace codemirror-vim's stock f/F motion with Flash smart-case matching.
+ * Reusing the built-in motion name preserves Vim's normal count, visual, and
+ * operator-pending pipelines without adding a competing key mapping, so a
+ * user mapping for f/F can still override the defaults normally.
+ */
+function moveToSmartCaseCharacter(cm: CodeMirrorV, head: Pos, motionArgs: MotionArgs): Pos {
+  const character = motionArgs.selectedCharacter ?? ''
+  const forward = !!motionArgs.forward
+  const lastSearch = Vim.getVimGlobalState_().lastCharacterSearch
+  lastSearch.increment = 0
+  lastSearch.forward = forward
+  lastSearch.selectedCharacter = character
+
+  if (!character) return head
+  const line = cm.getLine(head.line)
+  const positions = findSmartCaseCharacterPositions(line, character, 0, line.length)
+  const repeat = Math.max(1, motionArgs.repeat || 1)
+  const candidates = positions.filter((position) =>
+    forward ? position > head.ch : position < head.ch
+  )
+  const target = forward ? candidates[repeat - 1] : candidates[candidates.length - repeat]
+  return target == null ? head : { line: head.line, ch: target }
+}
+
+// `defineMotion` replaces the implementation behind the existing
+// f<character>/F<character> mappings. Re-run on module evaluation so Vite HMR
+// replaces a stale closure held by codemirror-vim's renderer-global registry.
+Vim.defineMotion('moveToCharacter', moveToSmartCaseCharacter)
 
 function renderedMatchesToSource(
   source: string,
@@ -587,10 +610,9 @@ class VimFlashController {
 
     const cursor = adapter.getCursor('head')
     const line = this.view.state.doc.line(cursor.line + 1)
-    // The labeled `s` jump is case-insensitive, but native Vim f/F motions are
-    // case-sensitive. Keep the enhanced repeat list aligned with the stock
-    // motion that initiated the session.
-    const positions = findExactCharacterPositions(
+    // Keep highlights and enhanced repeats aligned with the smart-case motion
+    // that initiated this session.
+    const positions = findSmartCaseCharacterPositions(
       this.view.state.doc.toString(),
       character,
       line.from,
@@ -693,6 +715,7 @@ class VimFlashController {
     ]
     session.targets = assignFlashLabels(
       text,
+      session.query,
       allMatches,
       this.view.state.selection.main.head,
       previousLabels,

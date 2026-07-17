@@ -107,6 +107,12 @@ describe('Vim Flash integration', () => {
     }))
   }
 
+  function characterHighlightPositions(view: EditorView): number[] {
+    return Array.from(view.dom.querySelectorAll<HTMLElement>('.cm-flash-char-match'))
+      .map((element) => view.posAtDOM(element, 0))
+      .sort((left, right) => left - right)
+  }
+
   function labelAt(view: EditorView, position: number): string {
     const target = renderedTargets(view).find((candidate) => candidate.position === position)
     if (!target) {
@@ -171,6 +177,24 @@ describe('Vim Flash integration', () => {
 
       expect(routeKey(view, labelAt(view, 20))).toBe(true)
       expect(view.state.selection.main.head).toBe(20)
+    })
+
+    it('uses smart case for multi-character jump queries', () => {
+      const doc = 'abc ABC Abc aBc'
+      const lowerCaseView = mount(doc)
+
+      expect(startVimFlashJump(lowerCaseView)).toBe(true)
+      typeJumpQuery(lowerCaseView, 'ab')
+      expect(
+        renderedTargets(lowerCaseView)
+          .map((target) => target.position)
+          .sort((left, right) => left - right)
+      ).toEqual([0, 4, 8, 12])
+
+      const upperCaseView = mount(doc)
+      expect(startVimFlashJump(upperCaseView)).toBe(true)
+      typeJumpQuery(upperCaseView, 'AB')
+      expect(renderedTargets(upperCaseView).map((target) => target.position)).toEqual([4])
     })
 
     it('replaces the source glyph with a baseline-sized label widget', () => {
@@ -238,6 +262,56 @@ describe('Vim Flash integration', () => {
       // The matching source character is now selected, so live preview reveals
       // the formula without making the jump settle at its opening delimiter.
       expect(view.dom.querySelector('.cm-math-inline')).toBeNull()
+    })
+
+    it('applies smart case to matches inside rendered math', async () => {
+      const doc = 'start $abc + ABC + Abc + aBc$ end'
+      const expectedLowerCaseMatches = [
+        doc.indexOf('abc'),
+        doc.indexOf('ABC'),
+        doc.indexOf('Abc'),
+        doc.indexOf('aBc')
+      ]
+      const lowerCaseView = mountMath(doc)
+
+      expect(startVimFlashJump(lowerCaseView)).toBe(true)
+      typeJumpQuery(lowerCaseView, 'ab')
+      await settleViewMeasure(lowerCaseView)
+      expect(
+        renderedTargets(lowerCaseView)
+          .map((target) => target.position)
+          .sort((left, right) => left - right)
+      ).toEqual(expectedLowerCaseMatches)
+
+      const upperCaseView = mountMath(doc)
+      expect(startVimFlashJump(upperCaseView)).toBe(true)
+      typeJumpQuery(upperCaseView, 'AB')
+      await settleViewMeasure(upperCaseView)
+      expect(renderedTargets(upperCaseView).map((target) => target.position)).toEqual([
+        doc.indexOf('ABC')
+      ])
+    })
+
+    it('applies smart case to rendered-only math glyphs', async () => {
+      const doc = 'start $\\gamma + \\Gamma$ end'
+      const lowerCaseView = mountMath(doc)
+
+      expect(startVimFlashJump(lowerCaseView)).toBe(true)
+      typeJumpQuery(lowerCaseView, 'γ')
+      await settleViewMeasure(lowerCaseView)
+      expect(
+        renderedTargets(lowerCaseView)
+          .map((target) => target.position)
+          .sort((left, right) => left - right)
+      ).toEqual([doc.indexOf('\\gamma'), doc.indexOf('\\Gamma')])
+
+      const upperCaseView = mountMath(doc)
+      expect(startVimFlashJump(upperCaseView)).toBe(true)
+      typeJumpQuery(upperCaseView, 'Γ')
+      await settleViewMeasure(upperCaseView)
+      expect(renderedTargets(upperCaseView).map((target) => target.position)).toEqual([
+        doc.indexOf('\\Gamma')
+      ])
     })
 
     it('creates separate labels for repeated matches inside one formula and jumps exactly', async () => {
@@ -421,12 +495,12 @@ describe('Vim Flash integration', () => {
   })
 
   describe('enhanced f/F repeats', () => {
-    it('repeats a stock forward f{char} with f and reverses it with F', async () => {
+    it('repeats a forward f{char} with f and reverses it with F', async () => {
       const view = mount('a x x x')
 
       // Use the real DOM route here: codemirror-vim publishes `vim-keypress`
       // after its view plugin handles the key, which is how Flash observes the
-      // otherwise stock f{char} motion.
+      // initial f{char} motion.
       dispatchVimKey(view, 'f')
       dispatchVimKey(view, 'x')
       await settleCharacterSearch()
@@ -441,20 +515,57 @@ describe('Vim Flash integration', () => {
       expect(view.state.selection.main.head).toBe(2)
     })
 
-    it('keeps native Vim character matching case-sensitive', async () => {
-      const view = mount('a x X x')
+    it('matches both cases for a lowercase character, including repeats', async () => {
+      const view = mount('z A a A a')
 
       dispatchVimKey(view, 'f')
-      dispatchVimKey(view, 'x')
+      dispatchVimKey(view, 'a')
       await settleCharacterSearch()
 
       expect(view.state.selection.main.head).toBe(2)
-      expect(view.dom.querySelectorAll('.cm-flash-char-match')).toHaveLength(2)
+      expect(characterHighlightPositions(view)).toEqual([2, 4, 6, 8])
 
       expect(routeKey(view, 'f')).toBe(true)
-      expect(view.state.selection.main.head).toBe(6)
+      expect(view.state.selection.main.head).toBe(4)
       expect(routeKey(view, 'F')).toBe(true)
       expect(view.state.selection.main.head).toBe(2)
+    })
+
+    it('matches only exact uppercase characters in a backward search and repeats', async () => {
+      const view = mount('a A a A z', 8)
+
+      dispatchVimKey(view, 'F')
+      dispatchVimKey(view, 'A')
+      await settleCharacterSearch()
+
+      expect(view.state.selection.main.head).toBe(6)
+      expect(characterHighlightPositions(view)).toEqual([2, 6])
+
+      expect(routeKey(view, 'f')).toBe(true)
+      expect(view.state.selection.main.head).toBe(2)
+      expect(routeKey(view, 'F')).toBe(true)
+      expect(view.state.selection.main.head).toBe(6)
+    })
+
+    it('preserves Vim counts and operators for smart-case f{char}', async () => {
+      const countView = mount('z A a A')
+
+      dispatchVimKey(countView, '2')
+      dispatchVimKey(countView, 'f')
+      dispatchVimKey(countView, 'a')
+      await settleCharacterSearch()
+
+      expect(countView.state.selection.main.head).toBe(4)
+      expect(characterHighlightPositions(countView)).toEqual([2, 4, 6])
+
+      const operatorView = mount('z A a')
+      dispatchVimKey(operatorView, 'd')
+      dispatchVimKey(operatorView, 'f')
+      dispatchVimKey(operatorView, 'a')
+      await settleCharacterSearch()
+
+      expect(operatorView.state.doc.toString()).toBe(' a')
+      expect(isVimFlashActive(operatorView)).toBe(false)
     })
 
     it('keeps the initial backward direction for F{char}', async () => {

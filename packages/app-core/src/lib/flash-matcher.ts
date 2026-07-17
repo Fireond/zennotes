@@ -25,14 +25,16 @@ export interface FlashTarget extends FlashMatch {
 }
 
 /**
- * Find every literal, case-insensitive query match contained by the supplied
- * ranges. Overlapping matches are included; overlapping ranges do not create
- * duplicate results.
+ * Find every literal smart-case query match contained by the supplied ranges.
+ * An all-lowercase query ignores case; the presence of an uppercase character
+ * makes the whole query case-sensitive. Overlapping matches are included, and
+ * overlapping ranges do not create duplicate results.
  *
- * Matching uses ECMAScript's Unicode-aware simple case folding. Searching the
- * original string (instead of a lower-cased copy) is important here: Unicode
- * case conversion can change a string's UTF-16 length, while CodeMirror needs
- * every returned offset to refer directly to the original document.
+ * Case-insensitive matching uses ECMAScript's Unicode-aware simple case
+ * folding. Searching the original string (instead of a lower-cased copy) is
+ * important here: Unicode case conversion can change a string's UTF-16 length,
+ * while CodeMirror needs every returned offset to refer directly to the
+ * original document.
  */
 export function findFlashMatches(
   text: string,
@@ -42,7 +44,10 @@ export function findFlashMatches(
   if (!query || !ranges.length) return []
 
   const matches = new Map<number, number>()
-  const matcher = new RegExp(escapeRegExp(query), 'giu')
+  const matcher = new RegExp(
+    escapeRegExp(query),
+    flashQueryIsCaseSensitive(query) ? 'gu' : 'giu'
+  )
   for (const range of ranges) {
     const from = clampOffset(range.from, text.length)
     const to = clampOffset(range.to, text.length)
@@ -74,13 +79,14 @@ export function findFlashMatches(
 /**
  * Assign collision-free labels to matches, nearest to the cursor first.
  *
- * Any label character found immediately after a current match is withheld:
- * typing that character must refine the query instead of prematurely jumping.
+ * Any label character found immediately after a current match is withheld when
+ * typing it could refine the current smart-case query instead of jumping.
  * Labels from the previous query refinement are retained when they remain
  * available and unique.
  */
 export function assignFlashLabels(
   text: string,
+  query: string,
   matches: readonly FlashMatch[],
   cursor: number,
   previousLabels: ReadonlyMap<number, string> = new Map(),
@@ -103,7 +109,9 @@ export function assignFlashLabels(
   const availableLabels = [...FLASH_LABEL_ALPHABET].filter(
     (label) =>
       ![...continuationCharacters].some((character) =>
-        equalsIgnoringCase(character, label)
+        flashQueryIsCaseSensitive(query)
+          ? character === label
+          : equalsIgnoringCase(character, label)
       )
   )
   if (!availableLabels.length) return []
@@ -160,6 +168,7 @@ export function buildFlashTargets(
 ): FlashTarget[] {
   return assignFlashLabels(
     text,
+    query,
     findFlashMatches(text, query, ranges),
     cursor,
     previousLabels
@@ -177,6 +186,14 @@ function escapeRegExp(value: string): string {
 
 function codePointLengthAt(value: string, offset: number): number {
   return (value.codePointAt(offset) ?? 0) > 0xffff ? 2 : 1
+}
+
+/** Whether Flash's smart-case rule should use exact-case matching. */
+function flashQueryIsCaseSensitive(query: string): boolean {
+  // Locale-independent Unicode lowercasing catches ordinary uppercase,
+  // titlecase, and compatibility-uppercase characters without changing the
+  // source text or the UTF-16 offsets returned by the regular expression.
+  return query !== query.toLowerCase()
 }
 
 function equalsIgnoringCase(left: string, right: string): boolean {
