@@ -1,236 +1,268 @@
 /**
- * TikZ → SVG rendering via node-tikzjax.
+ * TikZ rendering host.
  *
- * The rendering happens in the main process because node-tikzjax ships
- * with ~5 MB of pre-compiled TeX + a wasm engine — loading that in the
- * renderer would delay editor startup for everyone, including people
- * who never use a TikZ block. Running it on the main side means the
- * wasm/core dump is loaded once per app session, shared across all
- * open windows, and invisible to users who don't touch TikZ.
- *
- * Results are cached in-memory by source hash because re-rendering the
- * same block on every keystroke or theme switch is wasteful.
+ * Compilation runs in one lazily created Electron utility process. This keeps
+ * node-tikzjax's synchronous WebAssembly work and roughly 80 MB of TeX state
+ * out of the Electron main process, while retaining one warm engine shared by
+ * every window. Requests are serialized because node-tikzjax uses global state.
  */
-import { createHash } from "node:crypto";
+import { utilityProcess, type UtilityProcess } from 'electron'
+import { createHash } from 'node:crypto'
+import path from 'node:path'
+import {
+  MAX_TIKZ_CACHE_BYTES,
+  MAX_TIKZ_SOURCE_BYTES,
+  TIKZ_RENDER_TIMEOUT_MS,
+  errorText,
+  type TikzHostMessage,
+  type TikzRenderError,
+  type TikzRenderResponse,
+  type TikzRenderResult,
+  type TikzWorkerMessage
+} from './tikz-protocol'
 
-type Tex2Svg = (
-  input: string,
-  options?: Record<string, unknown>,
-) => Promise<string>;
+export type { TikzRenderError, TikzRenderResponse, TikzRenderResult } from './tikz-protocol'
 
-let tex2svg: Tex2Svg | null = null;
-let loadPromise: Promise<Tex2Svg> | null = null;
-let renderQueue: Promise<void> = Promise.resolve();
+interface PendingRender {
+  resolve(response: TikzRenderResponse): void
+  reject(error: Error): void
+  timer: ReturnType<typeof setTimeout>
+}
 
-async function load(): Promise<Tex2Svg> {
-  if (tex2svg) return tex2svg;
-  if (loadPromise) return loadPromise;
-  loadPromise = (async () => {
-    const mod = await import("node-tikzjax");
-    // node-tikzjax is a CJS module; its default export is itself `{ default: tex2svg }`.
-    const candidate =
-      (mod as unknown as { default?: { default?: Tex2Svg } | Tex2Svg })
-        .default ?? (mod as unknown as Tex2Svg);
-    const fn =
-      typeof candidate === "function"
-        ? candidate
-        : (candidate as { default: Tex2Svg }).default;
-    if (typeof fn !== "function") {
-      throw new Error("Could not locate tex2svg in node-tikzjax");
+class TikzWorkerConnection {
+  private nextRequestId = 1
+  private readonly pending = new Map<number, PendingRender>()
+  private readonly readyPromise: Promise<void>
+  private readyResolve: (() => void) | null = null
+  private readyReject: ((error: Error) => void) | null = null
+  private stopped = false
+
+  constructor(
+    private readonly child: UtilityProcess,
+    private readonly timeoutMs: number,
+    private readonly onStopped: () => void
+  ) {
+    this.readyPromise = new Promise((resolve, reject) => {
+      this.readyResolve = resolve
+      this.readyReject = reject
+    })
+    // Prevent an idle worker crash from producing an unhandled rejection.
+    void this.readyPromise.catch(() => {})
+
+    child.on('message', (raw) => this.onMessage(raw as TikzWorkerMessage))
+    child.on('exit', (code) => this.fail(new Error(`TikZ renderer exited with code ${code}.`)))
+    child.on('error', (type, location) => {
+      this.fail(new Error(`TikZ renderer process ${type}${location ? ` at ${location}` : ''}.`))
+    })
+    child.on('spawn', () => {
+      if (this.stopped && child.pid !== undefined) child.kill()
+    })
+    child.stdout?.on('data', (chunk) => process.stdout.write(`[tikz] ${String(chunk)}`))
+    child.stderr?.on('data', (chunk) => process.stderr.write(`[tikz] ${String(chunk)}`))
+  }
+
+  render(source: string): Promise<TikzRenderResponse> {
+    if (this.stopped) return Promise.reject(new Error('TikZ renderer is not running.'))
+    const requestId = this.nextRequestId++
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(requestId)
+        const seconds = this.timeoutMs / 1000
+        reject(new Error(`TikZ rendering timed out after ${seconds}s.`))
+        this.terminate()
+      }, this.timeoutMs)
+      this.pending.set(requestId, { resolve, reject, timer })
+
+      void this.readyPromise.then(
+        () => {
+          if (!this.pending.has(requestId) || this.stopped) return
+          const message: TikzHostMessage = {
+            type: 'render',
+            requestId,
+            source
+          }
+          this.child.postMessage(message)
+        },
+        (error: unknown) => {
+          const pending = this.pending.get(requestId)
+          if (!pending) return
+          this.pending.delete(requestId)
+          clearTimeout(pending.timer)
+          pending.reject(error instanceof Error ? error : new Error(errorText(error)))
+        }
+      )
+    })
+  }
+
+  terminate(): void {
+    if (this.stopped) return
+    this.stopped = true
+    this.rejectPending(new Error('TikZ renderer stopped.'))
+    this.readyReject?.(new Error('TikZ renderer stopped.'))
+    this.readyResolve = null
+    this.readyReject = null
+    if (this.child.pid !== undefined) this.child.kill()
+    this.onStopped()
+  }
+
+  private onMessage(message: TikzWorkerMessage): void {
+    if (!message || typeof message !== 'object') return
+    if (message.type === 'ready') {
+      this.readyResolve?.()
+      this.readyResolve = null
+      this.readyReject = null
+      return
     }
-    tex2svg = fn;
-    return fn;
-  })();
-  return loadPromise;
-}
+    if (message.type !== 'render-result') return
+    const pending = this.pending.get(message.requestId)
+    if (!pending) return
+    this.pending.delete(message.requestId)
+    clearTimeout(pending.timer)
+    pending.resolve(message.response)
+  }
 
-const cache = new Map<string, { ok: true; svg: string }>();
-const inFlight = new Map<string, Promise<TikzRenderResult | TikzRenderError>>();
-const CACHE_LIMIT = 200;
+  private fail(error: Error): void {
+    if (this.stopped) return
+    this.stopped = true
+    this.readyReject?.(error)
+    this.readyResolve = null
+    this.readyReject = null
+    this.rejectPending(error)
+    if (this.child.pid !== undefined) this.child.kill()
+    this.onStopped()
+  }
 
-function cacheKey(source: string): string {
-  return createHash("sha1").update(source).digest("hex");
-}
-
-function prune(): void {
-  if (cache.size <= CACHE_LIMIT) return;
-  // Drop oldest half (Map preserves insertion order).
-  const drop = Math.ceil(CACHE_LIMIT / 2);
-  let i = 0;
-  for (const key of cache.keys()) {
-    if (i++ >= drop) break;
-    cache.delete(key);
+  private rejectPending(error: Error): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer)
+      pending.reject(error)
+    }
+    this.pending.clear()
   }
 }
 
-/**
- * Normalize user-provided TikZ into the shape node-tikzjax expects:
- * optional preamble commands followed by `\begin{document}` … `\end{document}`.
- *
- * node-tikzjax already injects the standalone document class, so a pasted
- * `\documentclass{…}` line will make TeX fail. We strip that line, keep
- * any package / library setup, and wrap bare fragments automatically.
- */
-function wrapSource(source: string): string {
-  const trimmed = source.trim();
-  if (!trimmed) return "";
+export interface TikzRendererHostOptions {
+  workerPath: string
+  timeoutMs?: number
+  cacheLimitBytes?: number
+}
 
-  const withoutDocumentClass = trimmed
-    .replace(/^\s*\\documentclass(?:\[[^\]]*])?\{[^}]+\}\s*$/gm, "")
-    .trim();
+export class TikzRendererHost {
+  private worker: TikzWorkerConnection | null = null
+  private renderQueue: Promise<void> = Promise.resolve()
+  private readonly cache = new Map<string, { result: TikzRenderResult; bytes: number }>()
+  private readonly inFlight = new Map<string, Promise<TikzRenderResponse>>()
+  private readonly timeoutMs: number
+  private readonly cacheLimitBytes: number
+  private cacheBytes = 0
+  private stopped = false
 
-  const hasBeginDocument = /\\begin\{document\}/.test(withoutDocumentClass);
-  const hasEndDocument = /\\end\{document\}/.test(withoutDocumentClass);
-  if (hasBeginDocument && hasEndDocument) {
-    return withoutDocumentClass;
+  constructor(private readonly options: TikzRendererHostOptions) {
+    this.timeoutMs = options.timeoutMs ?? TIKZ_RENDER_TIMEOUT_MS
+    this.cacheLimitBytes = options.cacheLimitBytes ?? MAX_TIKZ_CACHE_BYTES
   }
 
-  const withoutDocumentWrappers = withoutDocumentClass
-    .replace(/\\begin\{document\}/g, "")
-    .replace(/\\end\{document\}/g, "")
-    .trim();
+  async render(source: string): Promise<TikzRenderResponse> {
+    if (typeof source !== 'string') return { ok: false, error: 'TikZ source must be a string.' }
+    if (!source.trim()) return { ok: false, error: 'Empty TikZ block' }
+    if (this.stopped) return { ok: false, error: 'TikZ renderer has stopped.' }
+    const sourceBytes = Buffer.byteLength(source, 'utf8')
+    if (sourceBytes > MAX_TIKZ_SOURCE_BYTES) {
+      return {
+        ok: false,
+        error: `TikZ block is ${sourceBytes} bytes; the limit is ${MAX_TIKZ_SOURCE_BYTES} bytes.`
+      }
+    }
 
-  const bodyStart = findDocumentBodyStart(withoutDocumentWrappers);
-  if (bodyStart > 0) {
-    const preamble = withoutDocumentWrappers.slice(0, bodyStart).trim();
-    const body = withoutDocumentWrappers.slice(bodyStart).trim();
-    return `${preamble}\n\\begin{document}\n${body}\n\\end{document}`;
-  }
+    const key = createHash('sha1').update(source).digest('hex')
+    const cached = this.cache.get(key)
+    if (cached) return cached.result
+    const pending = this.inFlight.get(key)
+    if (pending) return pending
 
-  return `\\begin{document}\n${withoutDocumentWrappers}\n\\end{document}`;
-}
-
-function findDocumentBodyStart(source: string): number {
-  const candidates = [
-    /\\begin\{(?!document\b)[^}]+\}/,
-    /\\tikz\b/,
-    /\\draw\b/,
-    /\\path\b/,
-    /\\node\b/,
-    /\\coordinate\b/,
-    /\\matrix\b/,
-    /\\graph\b/,
-  ];
-
-  let earliest = -1;
-  for (const pattern of candidates) {
-    const match = pattern.exec(source);
-    if (!match || match.index < 0) continue;
-    if (earliest < 0 || match.index < earliest) earliest = match.index;
-  }
-  return earliest;
-}
-
-export interface TikzRenderResult {
-  ok: true;
-  svg: string;
-}
-
-export interface TikzRenderError {
-  ok: false;
-  error: string;
-}
-
-export async function renderTikz(
-  source: string,
-): Promise<TikzRenderResult | TikzRenderError> {
-  if (!source.trim()) return { ok: false, error: "Empty TikZ block" };
-  const key = cacheKey(source);
-  const hit = cache.get(key);
-  if (hit) return hit;
-  const pending = inFlight.get(key);
-  if (pending) return pending;
-
-  const run = enqueueRender(async () => {
-    // node-tikzjax writes its TeX engine diagnostics via `console.log` only
-    // when `showConsole: true`, and its own README warns against multiple
-    // simultaneous renders. We serialize the TeX engine work here so
-    // different preview blocks and windows don't stomp on the shared wasm
-    // process or on this temporary console capture.
-    const captured: string[] = [];
-    const originalLog = console.log;
-    console.log = (...args: unknown[]): void => {
-      captured.push(
-        args.map((a) => (typeof a === "string" ? a : String(a))).join(" "),
-      );
-    };
-
+    const run = this.enqueue(async () => {
+      if (this.stopped) return { ok: false as const, error: 'TikZ renderer has stopped.' }
+      const worker = this.getWorker()
+      try {
+        const response = await worker.render(source)
+        if (response.ok) {
+          const bytes = Buffer.byteLength(response.svg, 'utf8')
+          const previous = this.cache.get(key)
+          if (previous) this.cacheBytes -= previous.bytes
+          this.cache.set(key, { result: response, bytes })
+          this.cacheBytes += bytes
+          this.pruneCache()
+        }
+        return response
+      } catch (error) {
+        if (this.worker === worker) {
+          this.worker = null
+          worker.terminate()
+        }
+        return { ok: false as const, error: errorText(error) }
+      }
+    })
+    this.inFlight.set(key, run)
     try {
-      const fn = await load();
-      // Only load pgfplots if it's referenced in the source code.
-      // pgfplots is extremely heavy and exhausts the TeX engine's pool size
-      // limit (~920k) when combined with other large packages (like circuitikz).
-      const texPackages: Record<string, string> = { amsmath: "", amssymb: "" };
-      const usesPgfPlots =
-        source.includes("pgfplots") ||
-        source.includes("axis") ||
-        source.includes("plot");
-      if (usesPgfPlots) {
-        texPackages.pgfplots = "";
-      }
-
-      const usesCircuiTikz =
-        source.includes("circuitikz") ||
-        source.includes("ctikzset");
-      if (usesCircuiTikz) {
-        texPackages.circuitikz = "";
-      }
-
-      const svg = await fn(wrapSource(source), {
-        showConsole: true,
-        // Enable the common TikZ libraries people reach for first. The
-        // wasm build ships with everything already compiled, so toggling
-        // these flags only changes which `\usetikzlibrary{…}` / `\usepackage{…}`
-        // statements get injected — negligible runtime cost.
-        texPackages,
-        tikzLibraries:
-          "arrows.meta,calc,positioning,shapes,decorations.pathreplacing,intersections,patterns",
-      });
-      console.log = originalLog;
-      const result = { ok: true as const, svg };
-      cache.set(key, result);
-      prune();
-      return result;
-    } catch (err) {
-      console.log = originalLog;
-      const base =
-        err instanceof Error ? err.message : "Unknown TikZ render error";
-      // Pick the last "!" (TeX error banner) plus the two following lines —
-      // they usually hold "! Package tikz Error: …" / "! Undefined control
-      // sequence." and the offending line.
-      const texDiag = extractTexError(captured.join("\n"));
-      const message = texDiag ? `${base}\n\n${texDiag}` : base;
-      // Also mirror to the real stderr so dev terminals see it.
-      originalLog("[tikz] render failed:", message);
-      return { ok: false as const, error: message };
+      return await run
+    } finally {
+      this.inFlight.delete(key)
     }
-  });
-  inFlight.set(key, run);
-  try {
-    return await run;
-  } finally {
-    inFlight.delete(key);
+  }
+
+  stop(): void {
+    this.stopped = true
+    this.worker?.terminate()
+    this.worker = null
+  }
+
+  private getWorker(): TikzWorkerConnection {
+    if (this.worker) return this.worker
+    const child = utilityProcess.fork(this.options.workerPath, [], {
+      serviceName: 'ZenNotes TikZ Renderer',
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    let connection: TikzWorkerConnection
+    connection = new TikzWorkerConnection(child, this.timeoutMs, () => {
+      if (this.worker === connection) this.worker = null
+    })
+    this.worker = connection
+    return connection
+  }
+
+  private enqueue<T>(job: () => Promise<T>): Promise<T> {
+    const next = this.renderQueue.then(job, job)
+    this.renderQueue = next.then(
+      () => undefined,
+      () => undefined
+    )
+    return next
+  }
+
+  private pruneCache(): void {
+    const entryLimit = 200
+    while (this.cache.size > entryLimit || this.cacheBytes > this.cacheLimitBytes) {
+      const oldest = this.cache.entries().next().value as
+        | [string, { result: TikzRenderResult; bytes: number }]
+        | undefined
+      if (!oldest) break
+      const [key, entry] = oldest
+      this.cache.delete(key)
+      this.cacheBytes -= entry.bytes
+    }
   }
 }
 
-function enqueueRender<T>(job: () => Promise<T>): Promise<T> {
-  const next = renderQueue.then(job, job);
-  renderQueue = next.then(
-    () => undefined,
-    () => undefined,
-  );
-  return next;
+const renderer = new TikzRendererHost({
+  workerPath: path.join(__dirname, 'tikz-worker.js')
+})
+
+/** Compile TikZ source without blocking Electron's main process. */
+export function renderTikz(source: string): Promise<TikzRenderResult | TikzRenderError> {
+  return renderer.render(source)
 }
 
-function extractTexError(log: string): string {
-  const lines = log.split(/\r?\n/);
-  let idx = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].startsWith("!")) {
-      idx = i;
-      break;
-    }
-  }
-  if (idx < 0) return "";
-  return lines.slice(idx, Math.min(idx + 4, lines.length)).join("\n");
+/** Stop the warm TeX utility process during app shutdown. */
+export function stopTikzRenderer(): void {
+  renderer.stop()
 }

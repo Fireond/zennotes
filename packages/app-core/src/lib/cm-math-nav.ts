@@ -1,19 +1,19 @@
 /**
- * Arrow-key navigation into rendered block math.
+ * Arrow-key navigation into rendered live-preview blocks.
  *
- * A rendered `$$…$$` block is a single block-replace widget with no cursor
+ * A rendered math or TikZ block is a block-replace widget with no cursor
  * coordinates inside it, so CodeMirror's pixel-based vertical motion
  * (`cursorLineUp`/`cursorLineDown`) skips clean over it — only a mouse click
  * could reveal the source. When the next logical line sits inside a rendered
- * block, step the cursor there directly; cm-math-render reveals the source in
- * the same transaction. Covers insert-mode and non-Vim editing; Vim's `j`/`k`
- * get the equivalent treatment in cm-vim-display-line.ts.
+ * block, step the cursor there directly; its renderer reveals the source in the
+ * same transaction. Covers insert-mode and non-Vim editing; Vim's `j`/`k` get
+ * the equivalent treatment in cm-vim-display-line.ts.
  */
 import { completionStatus } from '@codemirror/autocomplete'
 import type { EditorView, KeyBinding } from '@codemirror/view'
-import { mathBlockLineRanges } from './cm-math-render'
+import { renderedBlockLineRanges } from './cm-rendered-block-ranges'
 
-function moveIntoRenderedMathBlock(view: EditorView, dir: 1 | -1): boolean {
+function moveIntoRenderedBlock(view: EditorView, dir: 1 | -1): boolean {
   const state = view.state
   // Never steal arrows from an open autocomplete popup.
   if (completionStatus(state) === 'active') return false
@@ -22,7 +22,7 @@ function moveIntoRenderedMathBlock(view: EditorView, dir: 1 | -1): boolean {
   const line = state.doc.lineAt(sel.head)
   const targetNumber = line.number + dir
   if (targetNumber < 1 || targetNumber > state.doc.lines) return false
-  const block = mathBlockLineRanges(state).find(
+  const block = renderedBlockLineRanges(state).find(
     (r) => targetNumber >= r.fromLine && targetNumber <= r.toLine
   )
   if (!block) return false
@@ -39,7 +39,10 @@ function moveIntoRenderedMathBlock(view: EditorView, dir: 1 | -1): boolean {
   return true
 }
 
-export const mathBlockArrowKeymap: readonly KeyBinding[] = [
-  { key: 'ArrowDown', run: (view) => moveIntoRenderedMathBlock(view, 1) },
-  { key: 'ArrowUp', run: (view) => moveIntoRenderedMathBlock(view, -1) }
+export const renderedBlockArrowKeymap: readonly KeyBinding[] = [
+  { key: 'ArrowDown', run: (view) => moveIntoRenderedBlock(view, 1) },
+  { key: 'ArrowUp', run: (view) => moveIntoRenderedBlock(view, -1) }
 ]
+
+// Kept for callers that imported the original math-only name.
+export const mathBlockArrowKeymap = renderedBlockArrowKeymap

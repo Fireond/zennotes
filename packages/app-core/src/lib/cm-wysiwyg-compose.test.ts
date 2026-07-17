@@ -17,6 +17,7 @@ import { tablePlugin } from './cm-table'
 import { wysiwygBlocksPlugin } from './cm-wysiwyg-blocks'
 import { hashtagExtension } from './cm-hashtags'
 import { wikilinkRenderExtension } from './cm-wikilink-render'
+import { tikzRenderExtension } from './cm-tikz-render'
 
 vi.mock('../store', () => {
   const state = {
@@ -55,11 +56,25 @@ const RICH_DOC = [
   '```js',
   'const x = 1',
   '```',
+  '',
+  '> ```tikz',
+  '> \\begin{tikzpicture}',
+  '>   \\draw (0,0) -- (1,1);',
+  '> \\end{tikzpicture}',
+  '> ```',
   ''
 ].join('\n')
 
 describe('wysiwyg plugin composition', () => {
-  it('renders every block construct together without conflicting', () => {
+  it('renders every block construct together without conflicting', async () => {
+    const renderTikz = vi.fn().mockResolvedValue({
+      ok: true,
+      svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L10 10" /></svg>'
+    })
+    Object.defineProperty(window, 'zen', {
+      configurable: true,
+      value: { renderTikz }
+    })
     const parent = document.createElement('div')
     document.body.append(parent)
     const view = new EditorView({
@@ -75,7 +90,8 @@ describe('wysiwyg plugin composition', () => {
           tablePlugin,
           wysiwygBlocksPlugin,
           hashtagExtension,
-          wikilinkRenderExtension
+          wikilinkRenderExtension,
+          tikzRenderExtension
         ]
       })
     })
@@ -90,7 +106,13 @@ describe('wysiwyg plugin composition', () => {
     expect(view.dom.querySelectorAll('.cm-wq-quote').length).toBeGreaterThanOrEqual(1)
     expect(view.dom.querySelectorAll('.cm-hashtag').length).toBeGreaterThanOrEqual(1)
     expect(view.dom.querySelectorAll('.cm-wikilink').length).toBeGreaterThanOrEqual(1)
-    expect(view.dom.querySelectorAll('.cm-code-flair').length).toBeGreaterThanOrEqual(1)
+    expect(view.dom.querySelectorAll('.cm-code-flair')).toHaveLength(1)
+    await vi.waitFor(() => expect(view.dom.querySelector('.cm-tikz-block svg')).toBeTruthy())
+    expect(renderTikz).toHaveBeenCalledWith(
+      ['\\begin{tikzpicture}', '  \\draw (0,0) -- (1,1);', '\\end{tikzpicture}'].join(
+        '\n'
+      )
+    )
 
     view.destroy()
   })

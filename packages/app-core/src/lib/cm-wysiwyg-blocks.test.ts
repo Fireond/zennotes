@@ -53,6 +53,14 @@ describe('wysiwygBlocksPlugin', () => {
     view.destroy()
   })
 
+  it('leaves TikZ fences to the whole-block editor renderer', () => {
+    const view = mount('before\n\n```TiKZ\n\\begin{tikzpicture}\n\\end{tikzpicture}\n```\n\nafter')
+    expect(view.dom.textContent).toContain('```TiKZ')
+    expect(view.dom.textContent).toContain('\\begin{tikzpicture}')
+    expect(view.dom.textContent).toContain('```')
+    view.destroy()
+  })
+
   it('reveals the raw list marker on the active line', () => {
     const view = mount(DOC)
     const firstItem = DOC.indexOf('- first')

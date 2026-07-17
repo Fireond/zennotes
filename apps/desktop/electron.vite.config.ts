@@ -122,6 +122,7 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           'user-config-worker': resolve(__dirname, 'src/main/user-config-worker.ts'),
+          'tikz-worker': resolve(__dirname, 'src/main/tikz-worker.ts'),
           mcp: resolve(__dirname, 'src/mcp/index.ts'),
           cli: resolve(__dirname, 'src/cli/index.ts')
         }

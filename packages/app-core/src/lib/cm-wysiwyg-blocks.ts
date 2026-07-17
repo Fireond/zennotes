@@ -68,6 +68,7 @@ const hrRule = Decoration.replace({ widget: new HrWidget() })
 /** Hide a fence line's ``` ```lang ``` / ``` ``` ``` text (inline, keeps the
  *  line + its card styling) when the cursor is outside the code block. */
 const hideInline = Decoration.replace({})
+const FENCE_LANGUAGE_RE = /^\s*(?:`{3,}|~{3,})\s*([^\s`]*)/
 
 /** Header of an Obsidian-style callout: `> [!type] optional title`. */
 const CALLOUT_RE = /^(\s*>\s?)\[!(\w+)\]\s?(.*)$/
@@ -193,10 +194,18 @@ function buildDecorations(view: EditorView): DecorationSet {
           return
         }
         if (node.name === 'FencedCode') {
+          const firstLine = state.doc.lineAt(node.from)
+          const language = (
+            state.doc.sliceString(node.from, firstLine.to).match(FENCE_LANGUAGE_RE)?.[1] ?? ''
+          ).toLowerCase()
+          // cm-tikz-render owns the complete range as one block replacement.
+          // Do not place fence-hiding decorations inside that range; when the
+          // cursor enters it, the renderer disappears and the complete raw
+          // fence should be visible for editing.
+          if (language === 'tikz') return false
           // Hide the ``` fence lines when the cursor is outside the block, so
           // it reads as a clean card (the language flair still shows the lang).
           // Clicking into the block reveals the fences for editing.
-          const firstLine = state.doc.lineAt(node.from)
           const lastLine = state.doc.lineAt(Math.max(node.from, node.to - 1))
           let blockActive = false
           for (let n = firstLine.number; n <= lastLine.number; n++) {

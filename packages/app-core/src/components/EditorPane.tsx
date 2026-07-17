@@ -94,7 +94,8 @@ import { hashtagExtension } from '../lib/cm-hashtags'
 import { applyHighlight, HIGHLIGHT_COLORS, highlightExtension } from '../lib/cm-highlight'
 import { wikilinkRenderExtension } from '../lib/cm-wikilink-render'
 import { mathRenderExtension } from '../lib/cm-math-render'
-import { mathBlockArrowKeymap } from '../lib/cm-math-nav'
+import { tikzRenderExtension } from '../lib/cm-tikz-render'
+import { renderedBlockArrowKeymap } from '../lib/cm-math-nav'
 import { slashCommandSource, slashCommandRender } from '../lib/cm-slash-commands'
 import { calloutTypeSource } from '../lib/cm-callouts'
 import { dateShortcutSource } from '../lib/cm-date-shortcuts'
@@ -305,9 +306,9 @@ function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extens
     // binding wins; works in Vim normal/insert and non-Vim alike.
     ...configuredBindings,
     ...vimHalfPageKeymap(vimMode, overrides),
-    // Step arrows into rendered $$…$$ blocks (insert mode + non-Vim); Vim's
-    // j/k get the same treatment inside the display-line motion.
-    ...mathBlockArrowKeymap,
+    // Step arrows into rendered math/TikZ blocks (insert mode + non-Vim);
+    // Vim's j/k get the same treatment inside the display-line motion.
+    ...renderedBlockArrowKeymap,
     indentWithTab,
     ...baseKeymap,
     ...vimAwareAuxiliaryKeymap(historyKeymap, vimMode),
@@ -358,7 +359,8 @@ function wysiwygExtensions(renderTables: boolean): Extension[] {
     ...hashtagExtension,
     ...highlightExtension,
     ...wikilinkRenderExtension,
-    mathRenderExtension
+    mathRenderExtension,
+    tikzRenderExtension
   ]
 }
 

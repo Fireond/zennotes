@@ -58,6 +58,28 @@ describe('renderMarkdown', () => {
     expect(html).toContain('graph TD; A--&gt;B')
   })
 
+  it('preserves complete tikz-cd documents for the desktop renderer', () => {
+    const source = [
+      '\\usepackage{tikz-cd,amssymb}',
+      '\\begin{document}',
+      '  \\begin{tikzcd}',
+      '    A \\arrow[r, "f"] & B \\\\',
+      '    C \\arrow[u] & D \\arrow[l]',
+      '  \\end{tikzcd}',
+      '\\end{document}'
+    ].join('\n')
+    const html = renderMarkdown(`\`\`\`tikz\n${source}\n\`\`\``)
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    const placeholder = document.querySelector<HTMLElement>('.zen-tikz')
+
+    expect(placeholder).not.toBeNull()
+    expect(placeholder?.getAttribute('data-tikz-source')).toContain(
+      '\\usepackage{tikz-cd,amssymb}'
+    )
+    expect(placeholder?.textContent).toContain('\\begin{tikzcd}')
+    expect(placeholder?.textContent).toContain('A \\arrow[r, "f"] & B')
+  })
+
   it('renders Obsidian image embeds as local image nodes', () => {
     const html = renderMarkdown('![[CleanShot 2026-04-13 at 14.31.31@2x.png]]')
 

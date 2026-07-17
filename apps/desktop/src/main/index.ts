@@ -154,7 +154,7 @@ import type { DatabaseSidecar, DbRow } from '@shared/databases'
 import { VaultWatcher } from './watcher'
 import { WindowVaultRegistry } from './window-vaults'
 import { registerEphemeralRoot, isEphemeralRoot } from './ephemeral-vaults'
-import { renderTikz } from './tikz'
+import { renderTikz, stopTikzRenderer } from './tikz'
 import { RemoteServerClient } from './remote/server-client'
 import {
   getMcpClientStatuses,
@@ -3857,6 +3857,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   windowVaults.stopAll()
   stopRemoteWatch()
+  stopTikzRenderer()
   void userConfigHost?.stop()
   quickCaptureQuitting = true
   unregisterQuickCaptureHotkey()

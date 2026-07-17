@@ -1,6 +1,7 @@
 import { installZenBridge } from '@zennotes/bridge-contract/bridge'
 import { renderZenNotesApp } from '@zennotes/app-core/main'
 import { renderExportNoteWindow } from './export-window'
+import 'node-tikzjax/css/fonts.css'
 
 // Point Excalidraw's font loader at our local, CSP-allowed protocol instead of
 // its default esm.sh CDN (which the renderer CSP blocks, so no fonts applied).

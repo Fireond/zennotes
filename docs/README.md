@@ -25,6 +25,7 @@ If you are new to ZenNotes, read these first:
 ## How-to guides
 
 - [Open Markdown Files with ZenNotes](./how-to/open-markdown-files.md)
+- [Render TikZ Diagrams](./how-to/use-tikz-diagrams.md)
 - [Self-Host with Docker](./how-to/self-host-with-docker.md)
 - [Use ZenNotes with Raycast on macOS](./how-to/use-raycast.md)
 - [Connect Desktop to a Remote ZenNotes Server](./how-to/connect-desktop-to-remote-server.md)

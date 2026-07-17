@@ -1,8 +1,9 @@
 /**
  * Code-block "flair" for the WYSIWYG (Edit) editor: a small label pinned to
  * the top-right of each fenced code block showing its language (or "text"
- * when none is given). Clicking the label copies the block's contents — it
- * doubles as the copy button, so there's no separate copy/fold chrome.
+ * when none is given). TikZ is excluded because its dedicated live-preview
+ * widget owns the entire block. Clicking the label copies the block's contents
+ * — it doubles as the copy button, so there's no separate copy/fold chrome.
  *
  * WYSIWYG-only: this lives in `wysiwygExtensions()` and never loads in the
  * Split (source) editor.
@@ -98,8 +99,15 @@ function buildDecorations(view: EditorView): DecorationSet {
         if (seen.has(beginLine.from)) return false
         seen.add(beginLine.from)
 
-        const langMatch = beginLine.text.match(FENCE_RE)
+        // `FencedCode.from` points at the marker after any list/blockquote
+        // prefix, so slice from there to recognize nested fences too.
+        const langMatch = state.doc.sliceString(node.from, beginLine.to).match(FENCE_RE)
         const language = (langMatch?.[1] || 'text').toLowerCase()
+        // A complete TikZ fence is owned by cm-tikz-render's whole-block
+        // replacement while inactive. Emitting a widget inside that replaced
+        // range creates overlapping CodeMirror decorations, so TikZ source
+        // deliberately has no copy flair when it is revealed for editing.
+        if (language === 'tikz') return false
 
         const lastLine = state.doc.lineAt(Math.max(node.from, node.to - 1))
         // Content sits between the opening and closing fence lines. When the

@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { EditorState } from '@codemirror/state'
+import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { EditorState, type Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
 import { mathRenderExtension } from './cm-math-render'
+import { tikzRenderExtension } from './cm-tikz-render'
 import { zenMoveByDisplayLine } from './cm-vim-display-line'
 
 type Cm = Parameters<typeof zenMoveByDisplayLine>[0]
@@ -69,7 +71,7 @@ describe('zenMoveByDisplayLine (#290 display-line j/k, #314 count fallback)', ()
   })
 })
 
-describe('zenMoveByDisplayLine around rendered block math', () => {
+describe('zenMoveByDisplayLine around rendered live-preview blocks', () => {
   // 0-based lines: 0 `alpha`, 1 ``, 2 `$$`, 3 `x+1`, 4 `$$`, 5 ``, 6 `omega`.
   const MATH_DOC = 'alpha\n\n$$\nx+1\n$$\n\nomega'
 
@@ -77,9 +79,13 @@ describe('zenMoveByDisplayLine around rendered block math', () => {
     doc: string,
     head: { line: number; ch: number },
     args: MotionArgs,
-    findPosVResult: { line: number; ch: number }
+    findPosVResult: { line: number; ch: number },
+    renderExtension: Extension = mathRenderExtension
   ): { res: { line: number; ch: number }; findPosV: ReturnType<typeof vi.fn> } {
-    const state = EditorState.create({ doc, extensions: [mathRenderExtension] })
+    const state = EditorState.create({
+      doc,
+      extensions: [markdown({ base: markdownLanguage }), renderExtension]
+    })
     const findPosV = vi.fn(() => findPosVResult)
     const cm = {
       firstLine: () => 0,
@@ -138,13 +144,46 @@ describe('zenMoveByDisplayLine around rendered block math', () => {
     expect(res.line).toBe(1) // the blank line above the block, not past it
   })
 
-  it('leaves overshoots alone when no math block was skipped', () => {
+  it('leaves overshoots alone when no rendered block was skipped', () => {
     const { res } = runWithDoc(
       'plain\ntext\nonly\nhere\nnow',
       { line: 0, ch: 0 },
       { forward: true, repeat: 1 },
       { line: 3, ch: 0 }
     )
-    expect(res.line).toBe(3) // non-math skips (tables, folds) keep today's behavior
+    expect(res.line).toBe(3) // other skips (tables, folds) keep today's behavior
+  })
+
+  it('bare j and k step logically into a TikZ block', () => {
+    // 0-based lines: 0 `alpha`, 1 ``, 2 opening fence, 3 source,
+    // 4 closing fence, 5 ``, 6 `omega`.
+    const tikzDoc = [
+      'alpha',
+      '',
+      '```tikz',
+      '\\draw (0,0) -- (1,1);',
+      '```',
+      '',
+      'omega'
+    ].join('\n')
+    const down = runWithDoc(
+      tikzDoc,
+      { line: 1, ch: 0 },
+      { forward: true, repeat: 1 },
+      { line: 5, ch: 0 },
+      tikzRenderExtension
+    )
+    expect(down.findPosV).not.toHaveBeenCalled()
+    expect(down.res.line).toBe(2)
+
+    const up = runWithDoc(
+      tikzDoc,
+      { line: 5, ch: 0 },
+      { forward: false, repeat: 1 },
+      { line: 1, ch: 0 },
+      tikzRenderExtension
+    )
+    expect(up.findPosV).not.toHaveBeenCalled()
+    expect(up.res.line).toBe(4)
   })
 })

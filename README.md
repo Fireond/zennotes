@@ -196,12 +196,15 @@ Preview and split mode support:
 - GitHub-flavored Markdown
 - KaTeX math
 - Mermaid
-- TikZ
+- [TikZ](./docs/how-to/use-tikz-diagrams.md)
 - JSXGraph
 - function-plot
 - callouts
 - footnotes
 - wiki links and backlinks
+
+With live preview enabled, Edit mode also renders completed TikZ fences while
+the cursor is outside their source.
 
 ### Search, tasks, tags, and built-in views
 

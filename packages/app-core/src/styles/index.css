@@ -4733,6 +4733,33 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   opacity: 0.75;
 }
 
+/* Live-preview TikZ — a complete fenced block becomes an SVG while inactive,
+   then returns to exact Markdown source when clicked or entered by keyboard.
+   Keep all vertical spacing as padding: CodeMirror's block height map does not
+   include margins, and an unmeasured margin makes clicks drift after diagrams. */
+.cm-wysiwyg .cm-editor .cm-tikz-block {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 0.75em 0;
+  overflow-x: auto;
+  color: rgb(var(--z-fg));
+  text-align: center;
+  cursor: text;
+}
+.cm-wysiwyg .cm-editor .cm-tikz-block svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.cm-wysiwyg .cm-editor .cm-tikz-block .zen-diagram-error {
+  margin: 0;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
 /* Inline hashtags rendered as clickable pills — Obsidian's `.tag` style:
    accent text on a faint accent tint, pill radius. */
 .cm-wysiwyg .cm-editor .cm-hashtag {
