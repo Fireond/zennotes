@@ -4709,8 +4709,9 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 }
 
 /* Live-preview math — KaTeX rendered inline in the editor, matching the Preview
-   pipeline. The raw `$…$` / `$$…$$` source is revealed when the cursor enters it
-   (see cm-math-render.ts). */
+   pipeline. The raw `$…$` / `$$…$$` source is revealed when the cursor enters it,
+   with a read-only rendered copy directly below the active source (see
+   cm-math-render.ts). */
 .cm-wysiwyg .cm-editor .cm-math-inline {
   cursor: text;
 }
@@ -4726,6 +4727,23 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   cursor: text;
 }
 .cm-wysiwyg .cm-editor .cm-math-block .katex-display {
+  margin: 0;
+}
+.cm-wysiwyg .cm-editor .cm-math-edit-preview {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  /* Like the inactive block widget above, this is a measured CodeMirror block:
+     use padding rather than vertical margins so its height map stays exact. */
+  margin: 0;
+  padding: 0.25em 0 0.5em;
+  color: rgb(var(--z-fg));
+  text-align: center;
+  user-select: none;
+  cursor: default;
+}
+.cm-wysiwyg .cm-editor .cm-math-edit-preview .katex-display {
   margin: 0;
 }
 .cm-wysiwyg .cm-editor .cm-math-error {

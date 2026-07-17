@@ -69,10 +69,56 @@ describe('mathRenderExtension', () => {
     view.destroy()
   })
 
-  it('reveals the raw source of the formula under the cursor', () => {
+  it('reveals the raw source and previews the formula under the cursor', () => {
     // Cursor at offset 4 sits inside `$a+b$` (positions 2..7).
     const view = mount('x $a+b$ y', { anchor: 4 })
     expect(view.dom.querySelectorAll('.cm-math-inline').length).toBe(0)
+    const preview = view.dom.querySelector<HTMLElement>('.cm-math-edit-preview')
+    expect(preview?.dataset.mathSource).toBe('a+b')
+    expect(preview?.dataset.mathDisplay).toBe('inline')
+    expect(preview?.getAttribute('contenteditable')).toBe('false')
+    expect(preview?.getAttribute('aria-hidden')).toBe('true')
+    expect(preview?.querySelector('.katex')).not.toBeNull()
+    expect(preview?.querySelector('.katex-display')).toBeNull()
+    view.destroy()
+  })
+
+  it('updates the active preview in real time and removes it when the cursor leaves', () => {
+    const view = mount('x $a+b$ y', { anchor: 4 })
+    const b = view.state.doc.toString().indexOf('b')
+    view.dispatch({ changes: { from: b, to: b + 1, insert: 'c^2' } })
+
+    const preview = view.dom.querySelector<HTMLElement>('.cm-math-edit-preview')
+    expect(preview?.dataset.mathSource).toBe('a+c^2')
+    expect(preview?.textContent).toContain('c')
+
+    view.dispatch({ selection: { anchor: 0 } })
+    expect(view.dom.querySelector('.cm-math-edit-preview')).toBeNull()
+    expect(view.dom.querySelectorAll('.cm-math-inline')).toHaveLength(1)
+    view.destroy()
+  })
+
+  it('shows one display preview below active block math', () => {
+    const doc = 'before\n$$\n\\int_0^1 x\\,dx\n$$\nafter'
+    const view = mount(doc, { anchor: doc.indexOf('x\\,dx') })
+
+    expect(view.dom.querySelector('.cm-math-block')).toBeNull()
+    const preview = view.dom.querySelector<HTMLElement>('.cm-math-edit-preview')
+    expect(preview?.dataset.mathSource).toBe('\n\\int_0^1 x\\,dx\n')
+    expect(preview?.dataset.mathDisplay).toBe('block')
+    expect(preview?.querySelector('.katex-display')).not.toBeNull()
+    view.destroy()
+  })
+
+  it('previews only the formula containing the primary cursor', () => {
+    const doc = '$a$ and $b$'
+    const view = mount(doc, { anchor: doc.indexOf('b') })
+
+    const previews = view.dom.querySelectorAll<HTMLElement>('.cm-math-edit-preview')
+    expect(previews).toHaveLength(1)
+    expect(previews[0].dataset.mathSource).toBe('b')
+    // The other formula remains rendered normally.
+    expect(view.dom.querySelectorAll('.cm-math-inline')).toHaveLength(1)
     view.destroy()
   })
 })

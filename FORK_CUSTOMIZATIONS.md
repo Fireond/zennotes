@@ -18,6 +18,7 @@ Upstream baseline: ZenNotes v2.13.5, merged by `96e8ed5`
 | Global editor view mode | `b0db7b2` | Makes Edit/Split/Preview a global preference instead of a per-file setting. |
 | Programmable Vim configuration | `5ad424c` | Loads desktop `init.mjs` mappings and user commands, including buffer selection/read/write APIs for scripts. See `docs/reference/programmable-vim-config.md`. |
 | LuaSnip Markdown migration | `feat(editor): import LuaSnip Markdown snippets` (this document's commit) | Statically imports LuaSnip `markdown`, inherited groups such as `tex_shared`, and `all` into the main editor, with autosnippets, fields, choices, mirrors, captures, selected text, contexts, and Vim-style control keys. |
+| Live math edit preview | `feat(editor): preview active math while editing` (this document's commit) | Keeps the active `$…$` or `$$…$$` source editable while rendering a real-time KaTeX copy directly below it. |
 | Flash-style Vim motions | `aab45c7` | Adds case-insensitive incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
 | TikZ diagrams | `feat(desktop): render TikZ diagrams` (this document's commit) | Renders fenced `tikz` blocks in Preview, Split, export, and Edit live preview. |
 

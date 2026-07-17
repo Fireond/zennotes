@@ -5,9 +5,11 @@
  *    formula
  *
  * The raw source is revealed on whichever formula the cursor sits in, matching
- * how the rest of live preview reveals the active token. Math inside a code
- * span or fenced code is left literal, mirroring the Preview pipeline (whose
- * remark-math transform never visits code nodes).
+ * how the rest of live preview reveals the active token. The formula containing
+ * the primary cursor also gets a rendered preview directly below its source,
+ * which is rebuilt as the user types. Math inside a code span or fenced code is
+ * left literal, mirroring the Preview pipeline (whose remark-math transform
+ * never visits code nodes).
  *
  * Block replace decorations must be supplied from a StateField (CodeMirror needs
  * the block structure before the viewport is computed), so inline and block math
@@ -89,12 +91,46 @@ class BlockMathWidget extends WidgetType {
   }
 }
 
+type MathKind = 'inline' | 'block'
+
+/** Read-only KaTeX copy shown below the formula whose source is being edited. */
+class MathEditPreviewWidget extends WidgetType {
+  constructor(
+    readonly latex: string,
+    readonly kind: MathKind
+  ) {
+    super()
+  }
+  eq(other: MathEditPreviewWidget): boolean {
+    return other.latex === this.latex && other.kind === this.kind
+  }
+  toDOM(): HTMLElement {
+    const el = document.createElement('div')
+    el.className = `cm-math-edit-preview cm-math-edit-preview-${this.kind}`
+    el.dataset.mathSource = this.latex
+    el.dataset.mathDisplay = this.kind
+    // The editable source immediately above is the accessible representation.
+    // Announcing a second copy after every keystroke would be noisy, and letting
+    // the browser edit/select KaTeX's generated DOM would fight CodeMirror.
+    el.setAttribute('contenteditable', 'false')
+    el.setAttribute('aria-hidden', 'true')
+    renderKatex(el, this.latex, this.kind === 'block')
+    return el
+  }
+}
+
 /** Cursor/selection overlaps (or just touches an edge of) `[from, to]`. */
 function selectionTouches(state: EditorState, from: number, to: number): boolean {
   for (const range of state.selection.ranges) {
     if (Math.max(range.from, from) <= Math.min(range.to, to)) return true
   }
   return false
+}
+
+/** Whether the primary selection's active end is inside `[from, to]`. */
+function primaryHeadTouches(state: EditorState, from: number, to: number): boolean {
+  const head = state.selection.main.head
+  return head >= from && head <= to
 }
 
 function isInsideCode(state: EditorState, pos: number): boolean {
@@ -147,7 +183,23 @@ function buildMathRender(state: EditorState): MathRenderValue {
     // block ends up rendered or revealed.
     consumed.push([openLine.from, closeLine.to])
     blockLines.push({ fromLine: openLine.number, toLine: closeLine.number })
-    if (selectionTouches(state, openLine.from, closeLine.to)) continue
+    if (selectionTouches(state, openLine.from, closeLine.to)) {
+      if (primaryHeadTouches(state, openLine.from, closeLine.to)) {
+        // A proper block widget supplied by this StateField participates in
+        // CodeMirror's height map. Anchoring it after the closing-fence line
+        // keeps the preview below the source without covering nearby text.
+        pending.push({
+          from: closeLine.to,
+          to: closeLine.to,
+          deco: Decoration.widget({
+            block: true,
+            side: 1,
+            widget: new MathEditPreviewWidget(inner, 'block')
+          })
+        })
+      }
+      continue
+    }
     pending.push({
       from: openLine.from,
       to: closeLine.to,
@@ -174,7 +226,22 @@ function buildMathRender(state: EditorState): MathRenderValue {
       const to = from + im[0].length
       if (insideBlock(from, to)) continue
       if (isInsideCode(state, from + 1)) continue
-      if (selectionTouches(state, from, to)) continue
+      if (selectionTouches(state, from, to)) {
+        if (primaryHeadTouches(state, from, to)) {
+          // Inline formulas keep their source in the surrounding line. Put the
+          // preview after that line so it never splits or obscures prose.
+          pending.push({
+            from: line.to,
+            to: line.to,
+            deco: Decoration.widget({
+              block: true,
+              side: 1,
+              widget: new MathEditPreviewWidget(inner, 'inline')
+            })
+          })
+        }
+        continue
+      }
       pending.push({
         from,
         to,
