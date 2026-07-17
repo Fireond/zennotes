@@ -19,6 +19,7 @@ Upstream baseline: ZenNotes v2.13.5, merged by `96e8ed5`
 | Programmable Vim configuration | `5ad424c` | Loads desktop `init.mjs` mappings and user commands, including buffer selection/read/write APIs for scripts. See `docs/reference/programmable-vim-config.md`. |
 | LuaSnip Markdown migration | `feat(editor): import LuaSnip Markdown snippets` (this document's commit) | Statically imports LuaSnip `markdown`, inherited groups such as `tex_shared`, and `all` into the main editor, with autosnippets, fields, choices, mirrors, captures, selected text, contexts, and Vim-style control keys. |
 | Live math edit preview | `feat(editor): preview active math while editing` (this document's commit) | Keeps the active `$…$` or `$$…$$` source editable while rendering a real-time KaTeX copy directly below it. |
+| LaTeX source highlighting | `feat(editor): highlight LaTeX math source` (this document's commit) | Gives editable math a distinct theme color and syntax-colors commands, operators, numbers, brackets, and comments without exposing formula-internal Markdown syntax. |
 | Flash-style Vim motions | `aab45c7` | Adds case-insensitive incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
 | TikZ diagrams | `feat(desktop): render TikZ diagrams` (this document's commit) | Renders fenced `tikz` blocks in Preview, Split, export, and Edit live preview. |
 
@@ -61,6 +62,21 @@ automatic and 8 manual snippets, loaded from `markdown`, `tex_shared`, and
 Keep the real snippet files outside this repository; the tracked code
 contains the compatibility layer and tests, not a copied snapshot of a user's
 dotfiles.
+
+## LaTeX source highlighting
+
+`packages/app-core/src/lib/cm-math-syntax.ts` mounts a lightweight sTeX parser
+only over the source inside the existing opaque `InlineMath` and `BlockMath`
+nodes. Markdown therefore still cannot interpret formula `*` or `_` characters
+as emphasis, while CodeMirror can apply the app's theme-aware `tok-*` colors.
+
+The tokenizer keeps display formulas in math mode across blank lines. A scoped
+highlight style gives the entire editable formula—including Unicode and
+incomplete input—a distinct theme-aware base color, while commands, operators,
+numbers, brackets, and comments retain their own syntax colors. The `$` and
+`$$` delimiters remain unstyled. Inactive formulas and the live edit preview
+remain rendered by KaTeX. The main, floating, external, pinned-reference,
+template, and Quick Capture editors all install the same math-specific palette.
 
 ## TikZ implementation
 
@@ -144,6 +160,16 @@ env NODE_ENV=test npm run test:run --workspace @zennotes/desktop -- \
 npm run typecheck --workspace @zennotes/app-core
 npm run typecheck --workspace @zennotes/desktop
 npm run build --workspace @zennotes/desktop
+```
+
+Run focused LaTeX highlighting checks with:
+
+```sh
+env NODE_ENV=test npm run test:run --workspace @zennotes/app-core -- \
+  src/lib/cm-math-syntax.test.ts \
+  src/lib/cm-math-render.test.ts \
+  src/lib/cm-live-preview.test.ts \
+  src/lib/cm-vim-flash.test.ts
 ```
 
 The full app-core suite is:

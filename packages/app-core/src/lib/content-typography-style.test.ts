@@ -73,6 +73,13 @@ describe('editor and preview typography rhythm', () => {
     )
   })
 
+  it('makes editable math source visually distinct while leaving delimiters unstyled', () => {
+    expect(stylesSource).toMatch(
+      /\.cm-editor \.tok-math-source\s*\{[^}]*color:\s*rgb\(var\(--z-purple\)\);/s
+    )
+    expect(stylesSource).not.toMatch(/\.cm-editor \.tok-math-delimiter/)
+  })
+
   it('keeps search match highlights visible inside code blocks and inline code', () => {
     // Theme-aware background so the match shows against paper/dark themes.
     expect(stylesSource).toMatch(

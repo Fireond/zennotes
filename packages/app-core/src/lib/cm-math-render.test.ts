@@ -6,9 +6,13 @@ import { EditorState, type EditorSelection } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { describe, expect, it } from 'vitest'
 import { mathRenderExtension } from './cm-math-render'
-import { mathMarkdownSyntax } from './cm-math-syntax'
+import { mathMarkdownSyntax, mathSyntaxHighlight } from './cm-math-syntax'
 
-function mount(doc: string, selection?: EditorSelection | { anchor: number }): EditorView {
+function mount(
+  doc: string,
+  selection?: EditorSelection | { anchor: number },
+  renderMath = true
+): EditorView {
   const parent = document.createElement('div')
   document.body.append(parent)
   const view = new EditorView({
@@ -18,7 +22,8 @@ function mount(doc: string, selection?: EditorSelection | { anchor: number }): E
       selection: selection ?? { anchor: 0 },
       extensions: [
         markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
-        mathRenderExtension
+        mathSyntaxHighlight,
+        renderMath ? mathRenderExtension : []
       ]
     })
   })
@@ -30,6 +35,18 @@ function mount(doc: string, selection?: EditorSelection | { anchor: number }): E
 }
 
 describe('mathRenderExtension', () => {
+  it('highlights complete math source without styling structural dollars in raw mode', () => {
+    const view = mount('plain $x + π$ and `$code$`', undefined, false)
+    const source = Array.from(view.dom.querySelectorAll<HTMLElement>('.tok-math-source'))
+      .map((span) => span.textContent)
+      .join('')
+
+    expect(source).toBe('x + π')
+    expect(view.dom.querySelector('.tok-math-delimiter')).toBeNull()
+    expect(view.dom.querySelector('.cm-math-inline')).toBeNull()
+    view.destroy()
+  })
+
   it('renders inline $…$ formulas', () => {
     const view = mount('start\n\nInline $a^2+b^2=c^2$ and $x_1$ here.\n\nend')
     const formulas = view.dom.querySelectorAll<HTMLElement>('.cm-math-inline')
@@ -118,11 +135,52 @@ describe('mathRenderExtension', () => {
     const doc = '$a$ and $b$'
     const view = mount(doc, { anchor: doc.indexOf('b') })
 
-    const previews = view.dom.querySelectorAll<HTMLElement>('.cm-math-edit-preview')
+    const previews = view.dom.querySelectorAll<HTMLElement>(
+      '.cm-math-edit-preview'
+    )
     expect(previews).toHaveLength(1)
     expect(previews[0].dataset.mathSource).toBe('b')
     // The other formula remains rendered normally.
     expect(view.dom.querySelectorAll('.cm-math-inline')).toHaveLength(1)
+    view.destroy()
+  })
+
+  it('highlights only revealed LaTeX source while cursor transitions keep other formulas rendered', () => {
+    const doc = String.raw`first $\sum_{i=1}^{n} i$ and second $\alpha + x_2$`
+    const view = mount(doc, { anchor: doc.indexOf(String.raw`\sum`) })
+
+    const activeCommand = view.dom.querySelector<HTMLElement>('.tok-math-command')
+    expect(activeCommand?.textContent).toContain(String.raw`\sum`)
+    expect(activeCommand?.closest('.cm-math-source')).not.toBeNull()
+    expect(view.dom.querySelector('.tok-math-source')).not.toBeNull()
+    expect(view.dom.querySelector('.tok-math-number')).not.toBeNull()
+    expect(view.dom.querySelector('.tok-math-delimiter')).toBeNull()
+    expect(
+      view.dom.querySelectorAll<HTMLElement>('.cm-math-inline')
+    ).toHaveLength(1)
+    expect(
+      view.dom.querySelector<HTMLElement>('.cm-math-inline')?.dataset.mathSource
+    ).toBe(String.raw`\alpha + x_2`)
+
+    view.dispatch({ selection: { anchor: doc.indexOf(String.raw`\alpha`) } })
+
+    const transitionedCommand = view.dom.querySelector<HTMLElement>('.tok-math-command')
+    expect(transitionedCommand?.textContent).toContain(String.raw`\alpha`)
+    expect(transitionedCommand?.closest('.cm-math-source')).not.toBeNull()
+    expect(
+      view.dom.querySelectorAll<HTMLElement>('.cm-math-inline')
+    ).toHaveLength(1)
+    expect(
+      view.dom.querySelector<HTMLElement>('.cm-math-inline')?.dataset.mathSource
+    ).toBe(String.raw`\sum_{i=1}^{n} i`)
+    expect(view.dom.querySelector('.tok-math-delimiter')).toBeNull()
+
+    view.dispatch({ selection: { anchor: 0 } })
+    expect(view.dom.querySelector('.tok-math-command')).toBeNull()
+    expect(view.dom.querySelector('.tok-math-source')).toBeNull()
+    expect(view.dom.querySelector('.tok-math-delimiter')).toBeNull()
+    expect(view.dom.querySelectorAll('.cm-math-inline')).toHaveLength(2)
+    expect(view.dom.querySelector('.cm-math-edit-preview')).toBeNull()
     view.destroy()
   })
 })

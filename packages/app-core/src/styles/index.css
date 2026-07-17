@@ -2229,6 +2229,33 @@ html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done {
   font-style: italic;
 }
 
+/* Editable LaTeX source. The purple base makes the whole math zone distinct;
+   more specific math-token classes retain syntax contrast. */
+.cm-editor .tok-math-source {
+  color: rgb(var(--z-purple));
+}
+.cm-editor .tok-math-command {
+  color: rgb(var(--z-accent));
+  font-weight: 600;
+}
+.cm-editor .tok-math-number {
+  color: rgb(var(--z-yellow));
+}
+.cm-editor .tok-math-operator,
+.cm-editor .tok-math-bracket {
+  color: rgb(var(--z-fg-2));
+}
+.cm-editor .tok-math-comment {
+  color: rgb(var(--z-fg-2));
+  font-style: italic;
+  opacity: 0.85;
+}
+@media (forced-colors: active) {
+  .cm-editor .tok-math-source {
+    color: CanvasText;
+  }
+}
+
 /* Preview code highlighting (rehype-highlight / highlight.js) mapped onto the
    same theme-adaptive palette the editor uses above, so a fenced block reads the
    same in the editor and the preview (and adapts to every theme) instead of a

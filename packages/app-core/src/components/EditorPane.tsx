@@ -53,7 +53,7 @@ import {
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { isImeComposing } from '../lib/ime'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
-import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
+import { mathMarkdownSyntax, mathSyntaxHighlight } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { forwardOnCheckboxArrow } from '../lib/cm-forward-task'
 import { completionNavKeymap } from '../lib/cm-completion-nav'
@@ -348,6 +348,7 @@ function markdownEditingExtensions(): Extension[] {
 function markdownSyntaxHighlightExtensions(): Extension[] {
   return [
     syntaxHighlighting(paperHighlight),
+    mathSyntaxHighlight,
     syntaxHighlighting(defaultHighlightStyle, { fallback: true })
   ]
 }

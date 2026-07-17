@@ -37,7 +37,7 @@ import {
 import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-default-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
-import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
+import { mathMarkdownSyntax, mathSyntaxHighlight } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
@@ -269,6 +269,7 @@ export function PinnedReferencePane(): JSX.Element | null {
           markdownListIndentPlugin,
           headingFolding(),
           syntaxHighlighting(paperHighlight),
+          mathSyntaxHighlight,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           livePreviewCompartment.of(s0.livePreview ? livePreviewPlugin : []),
           lineNumbersCompartment.of(lineNumberExtension(s0.lineNumberMode)),

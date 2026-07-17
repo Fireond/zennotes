@@ -50,7 +50,7 @@ import { registerDisplayLineMotion } from '../lib/cm-vim-display-line'
 import { inlineFormatKeymap } from '../lib/cm-inline-format-keymap'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { resolveCodeLanguage } from '../lib/cm-code-languages'
-import { mathMarkdownSyntax } from '../lib/cm-math-syntax'
+import { mathMarkdownSyntax, mathSyntaxHighlight } from '../lib/cm-math-syntax'
 import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language'
@@ -453,6 +453,7 @@ export function QuickCaptureApp(): JSX.Element {
           vimAwareMarkdownKeymap,
           markdownListIndentPlugin,
           syntaxHighlighting(captureHighlight),
+          mathSyntaxHighlight,
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           placeholder('Start writing…'),
           // Notion-style `/` slash commands — same block inserters as the main
