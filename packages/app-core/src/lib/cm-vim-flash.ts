@@ -939,6 +939,10 @@ const vimFlashTheme = EditorView.baseTheme({
     position: 'relative',
     boxSizing: 'border-box',
     verticalAlign: 'baseline',
+    // Markdown list lines use an inherited negative text-indent for their
+    // hanging layout. An inline-block applies that indent to its own first
+    // line, which shifts the hint away from the source glyph unless reset.
+    textIndent: '0',
     color: 'rgb(var(--z-bg))',
     backgroundColor: 'rgb(var(--z-accent))',
     borderRadius: '2px',
