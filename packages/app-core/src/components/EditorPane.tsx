@@ -287,6 +287,22 @@ function buildEditorKeymap(vimMode: boolean, overrides: KeymapOverrides): Extens
       key: toCodeMirrorKey(getKeymapBinding(overrides, 'editor.moveLineDown')),
       run: moveLineDown
     },
+    // Inline-format shortcuts (bold/italic/code/strike/highlight/math/link). In
+    // Vim mode VimNav owns these (its window handler also resolves the Ctrl+I
+    // jumplist collision on Linux); in non-Vim mode that handler is disabled, so
+    // bind them here — the mode-agnostic keymap — so they work in both modes as
+    // the docs promise. Matches the Quick Capture window's bindings. (#416)
+    ...(vimMode
+      ? []
+      : [
+          { key: 'Mod-b', run: (v: EditorView): boolean => toggleWrap(v, '**') },
+          { key: 'Mod-i', run: (v: EditorView): boolean => toggleWrap(v, '*') },
+          { key: 'Mod-e', run: (v: EditorView): boolean => toggleWrap(v, '`') },
+          { key: 'Shift-Mod-s', run: (v: EditorView): boolean => toggleWrap(v, '~~') },
+          { key: 'Shift-Mod-h', run: (v: EditorView): boolean => toggleWrap(v, '==') },
+          { key: 'Shift-Mod-m', run: (v: EditorView): boolean => toggleWrap(v, '$') },
+          { key: 'Mod-k', run: (v: EditorView): boolean => wrapLink(v) }
+        ]),
     ...vimHalfPageKeymap(vimMode, overrides),
     // Step arrows into rendered $$…$$ blocks (insert mode + non-Vim); Vim's
     // j/k get the same treatment inside the display-line motion.
@@ -811,6 +827,10 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     x: number
     y: number
     hasSelection: boolean
+    // Snapshot the selection at open time; the menu steals focus, so the live
+    // selection can't be trusted when an item (e.g. Highlight) runs. (#416)
+    selFrom: number
+    selTo: number
   } | null>(null)
   const [editorHydration, setEditorHydration] = useState<EditorHydrationState | null>(null)
   const [assetDropActive, setAssetDropActive] = useState(false)
@@ -895,7 +915,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     setEditorMenu({
       x: pos.x,
       y: pos.y,
-      hasSelection: !sel.empty
+      hasSelection: !sel.empty,
+      selFrom: sel.from,
+      selTo: sel.to
     })
     view.focus()
     return true
@@ -3470,7 +3492,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
                   setEditorMenu({
                     x: e.clientX,
                     y: e.clientY,
-                    hasSelection: !sel.empty
+                    hasSelection: !sel.empty,
+                    selFrom: sel.from,
+                    selTo: sel.to
                   })
                 }}
                 >
@@ -3606,7 +3630,8 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           items={buildEditorContextItems(
             viewRef.current,
             editorMenu.hasSelection,
-            captureCommentDraft
+            captureCommentDraft,
+            { from: editorMenu.selFrom, to: editorMenu.selTo }
           )}
           onClose={() => setEditorMenu(null)}
         />
@@ -3701,7 +3726,10 @@ function HighlightSwatch({ color }: { color: string }): JSX.Element {
 function buildEditorContextItems(
   view: EditorView | null,
   hasSelection: boolean,
-  onAddComment: () => void
+  onAddComment: () => void,
+  // Selection snapshotted when the menu opened, applied by the highlight actions
+  // so they don't depend on the live selection surviving the menu. (#416)
+  selRange: { from: number; to: number }
 ): ContextMenuItem[] {
   if (!view) return []
 
@@ -3713,18 +3741,18 @@ function buildEditorContextItems(
           label: 'Highlight',
           hint: formatKeyToken('Mod+Shift+H'),
           icon: <HighlighterIcon width={14} height={14} />,
-          onSelect: async () => applyHighlight(view, 'yellow')
+          onSelect: async () => applyHighlight(view, 'yellow', selRange)
         },
         ...HIGHLIGHT_COLORS.filter((c) => c.id !== 'yellow').map(
           (c): ContextMenuItem => ({
             label: `Highlight: ${c.label}`,
             icon: <HighlightSwatch color={c.id} />,
-            onSelect: async () => applyHighlight(view, c.id)
+            onSelect: async () => applyHighlight(view, c.id, selRange)
           })
         ),
         {
           label: 'Remove highlight',
-          onSelect: async () => applyHighlight(view, 'remove')
+          onSelect: async () => applyHighlight(view, 'remove', selRange)
         },
         { kind: 'separator' }
       ]
