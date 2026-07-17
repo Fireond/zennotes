@@ -813,8 +813,19 @@ export function VimNav(): JSX.Element | null {
       // VimNav consumes the leader keypress before TasksView sees it, so the
       // leader no longer collides with Space-to-toggle. (#151)
       const panelViewActive = isTasksViewActive(state) || isTagsViewActive(state)
+      // Only defer while that view actually holds keyboard focus. After pane
+      // navigation moves focus to another panel (e.g. Ctrl+W h → sidebar), the
+      // Tasks/Tags tab is still "active" but focusedPanel is no longer
+      // 'tasks'/'tags' — so we must NOT bail here, or the target panel's keys
+      // (sidebar j/k) would be handled by nobody (the view now releases them
+      // too). A null panel means "no explicit focus yet", so keep deferring. (#412)
+      const panelViewFocused =
+        state.focusedPanel == null ||
+        state.focusedPanel === 'tasks' ||
+        state.focusedPanel === 'tags'
       if (
         panelViewActive &&
+        panelViewFocused &&
         !leaderPending.current &&
         sequenceTokenFromEvent(e) !== leaderToken
       ) {
@@ -984,8 +995,11 @@ export function VimNav(): JSX.Element | null {
 
       // In the tasks/tags panels, only leader input is handled above; hand
       // every other key (including a just-reset leader sequence) back to the
-      // panel's own capture handler. (#151)
-      if (panelViewActive && sequenceTokenFromEvent(e) !== leaderToken) {
+      // panel's own capture handler — but only while that view actually holds
+      // keyboard focus. Once pane navigation moves focus to another panel
+      // (e.g. Ctrl+W h → sidebar), fall through so the sidebar/etc. handlers
+      // below run instead of the keys going to nobody. (#151, #412)
+      if (panelViewActive && panelViewFocused && sequenceTokenFromEvent(e) !== leaderToken) {
         return
       }
 

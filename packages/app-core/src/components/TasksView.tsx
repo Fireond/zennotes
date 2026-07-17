@@ -336,6 +336,13 @@ export function TasksView(): JSX.Element {
   //      own keyboard handlers in those components.
   // Registered in CAPTURE phase + uses `stopImmediatePropagation` so it
   // beats VimNav's global handler.
+  // Activating the Tasks tab claims panel focus for the Tasks view so pane
+  // navigation and the key handler below agree on where focus is. Fires only on
+  // the activation edge, so a later Ctrl+W to another panel isn't overridden. (#412)
+  useEffect(() => {
+    if (isActivePanel) useStore.getState().setFocusedPanel('tasks')
+  }, [isActivePanel])
+
   useEffect(() => {
     if (!isActivePanel) return
     const handler = (e: KeyboardEvent): void => {
@@ -345,6 +352,13 @@ export function TasksView(): JSX.Element {
       // While the Vim hint overlay is open it owns the keyboard; don't let
       // task navigation (or Esc closing the view) steal its keys. (#151)
       if (document.querySelector('[data-vim-hint-overlay]')) return
+      // The Tasks tab can stay "active" while pane navigation (Ctrl+W h/j/k/l)
+      // moves keyboard focus to another panel. Once focusedPanel is no longer
+      // 'tasks', release the keys so the target panel (e.g. the sidebar) gets
+      // j/k instead of this capture listener beating VimNav to them. A `null`
+      // panel means "no explicit focus yet" — keep handling as before. (#412)
+      const fp = useStore.getState().focusedPanel
+      if (fp != null && fp !== 'tasks') return
       const active = document.activeElement as HTMLElement | null
       if (active) {
         const tag = active.tagName
