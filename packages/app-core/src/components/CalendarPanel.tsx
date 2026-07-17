@@ -169,6 +169,7 @@ export function CalendarPanel({ note }: { note: NoteContent }): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [note.path])
   const selectedDate = useMemo(() => parseIsoDate(selectedIso), [selectedIso])
+  const selectedWeekIso = useMemo(() => isoWeekStr(selectedDate), [selectedDate])
 
   // Tasks scheduled for the selected day. Tasks written in a daily note inherit
   // that note's date (implicit due) just like the full Tasks calendar, so we run
@@ -1073,13 +1074,25 @@ export function CalendarPanel({ note }: { note: NoteContent }): JSX.Element {
             <div className="min-w-0 truncate text-xs font-semibold text-ink-800">
               Week of {weekRangeLabel}
             </div>
-            <button
-              type="button"
-              onClick={() => void openOrCreateDay(selectedDate, selectedIso)}
-              className="shrink-0 rounded px-1.5 py-0.5 text-2xs text-ink-500 transition-colors hover:bg-paper-200 hover:text-accent"
-            >
-              {dailyByDate.has(selectedIso) ? 'Open note →' : 'Create note'}
-            </button>
+            {weeklyEnabled ? (
+              <button
+                type="button"
+                onClick={() => void handleWeekClick(selectedDate, selectedWeekIso)}
+                title={`Open weekly note (${weeklyNoteTitle(selectedDate)})`}
+                className="shrink-0 rounded px-1.5 py-0.5 text-2xs text-ink-500 transition-colors hover:bg-paper-200 hover:text-accent"
+              >
+                {weeklyByWeek.has(selectedWeekIso) ? 'Open note →' : 'Create note'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void openOrCreateDay(selectedDate, selectedIso)}
+                title={`Open daily note (${selectedIso})`}
+                className="shrink-0 rounded px-1.5 py-0.5 text-2xs text-ink-500 transition-colors hover:bg-paper-200 hover:text-accent"
+              >
+                {dailyByDate.has(selectedIso) ? 'Open note →' : 'Create note'}
+              </button>
+            )}
           </div>
 
           <form
