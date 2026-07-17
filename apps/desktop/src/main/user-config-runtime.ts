@@ -7,6 +7,10 @@ import type {
   UserCommandResult,
   UserConfigApi,
   UserKeyTargetOptions,
+  UserLuaSnipImportOptions,
+  UserSnippet,
+  UserSnippetDiagnostic,
+  UserSnippetKeybindings,
   UserTransformDefinition,
   UserVimMapping,
   UserVimMappingTarget,
@@ -14,11 +18,25 @@ import type {
   UserVimModeInput
 } from '@zennotes/bridge-contract/user-config'
 import { USER_COMMAND_RESULT_LIMITS } from '@zennotes/bridge-contract/user-config'
+import path from 'node:path'
+import { importLuaSnipStatic } from './user-luasnip-importer'
 
 export interface LoadedUserConfig {
   mappings: UserVimMapping[]
   commands: UserCommandDescriptor[]
+  snippets: UserSnippet[]
+  snippetDiagnostics: UserSnippetDiagnostic[]
+  snippetKeys: UserSnippetKeybindings
+  dependencies: string[]
   invoke(id: string, context: UserCommandContext): Promise<UserCommandResult | null>
+}
+
+const EMPTY_SNIPPET_KEYS: UserSnippetKeybindings = {
+  expandOrJump: null,
+  jumpBackward: null,
+  nextChoice: null,
+  previousChoice: null,
+  storeSelection: null
 }
 
 const MODE_ALIASES: Record<UserVimModeInput, UserVimMode> = {
@@ -142,13 +160,18 @@ export function normalizeUserCommandResult(value: unknown): UserCommandResult | 
   return result
 }
 
-function createRuntime(): {
+function createRuntime(configPath: string): {
   api: UserConfigApi
   finish(): LoadedUserConfig
 } {
   const mappings = new Map<string, UserVimMapping>()
   const handlers = new Map<string, UserCommandDefinition['run']>()
   const descriptors = new Map<string, UserCommandDescriptor>()
+  const snippets: UserSnippet[] = []
+  const snippetDiagnostics: UserSnippetDiagnostic[] = []
+  const snippetKeys: UserSnippetKeybindings = { ...EMPTY_SNIPPET_KEYS }
+  const dependencies = new Set<string>()
+  let snippetOrder = 0
   let acceptingRegistrations = true
 
   const assertRegistering = (): void => {
@@ -208,6 +231,21 @@ function createRuntime(): {
     descriptors.set(id, { id, title })
   }
 
+  const applySnippetKeys = (options: UserLuaSnipImportOptions['keys']): void => {
+    if (options === undefined) return
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new Error('LuaSnip keys must be an object.')
+    }
+    const known = new Set(Object.keys(EMPTY_SNIPPET_KEYS))
+    for (const [name, value] of Object.entries(options)) {
+      if (!known.has(name)) throw new Error(`Unknown LuaSnip snippet key "${name}".`)
+      if (value !== null && (typeof value !== 'string' || !value.trim())) {
+        throw new Error(`LuaSnip snippet key "${name}" must be a non-empty string or null.`)
+      }
+      snippetKeys[name as keyof UserSnippetKeybindings] = value === null ? null : value.trim()
+    }
+  }
+
   const api: UserConfigApi = {
     keys: (keys) => ({
       type: 'keys',
@@ -230,10 +268,7 @@ function createRuntime(): {
             recursive: recursiveOption(options)
           }
         } else if (rawTarget?.type === 'keys') {
-          if (
-            rawTarget.recursive !== undefined &&
-            typeof rawTarget.recursive !== 'boolean'
-          ) {
+          if (rawTarget.recursive !== undefined && typeof rawTarget.recursive !== 'boolean') {
             throw new Error('zen.keys() target recursive must be a boolean.')
           }
           target = {
@@ -283,6 +318,23 @@ function createRuntime(): {
           }
         })
       }
+    },
+    snippets: {
+      importLuaSnip: async (options) => {
+        assertRegistering()
+        const imported = await importLuaSnipStatic(options, path.dirname(configPath), snippetOrder)
+        assertRegistering()
+        applySnippetKeys(options.keys)
+        snippetOrder = imported.nextOrder
+        snippets.push(...imported.snippets)
+        snippetDiagnostics.push(...imported.diagnostics)
+        for (const dependency of imported.dependencies) dependencies.add(dependency)
+        return {
+          imported: imported.snippets.length,
+          diagnostics: structuredClone(imported.diagnostics),
+          dependencies: [...imported.dependencies]
+        }
+      }
     }
   }
 
@@ -293,6 +345,10 @@ function createRuntime(): {
       return {
         mappings: [...mappings.values()],
         commands: [...descriptors.values()],
+        snippets: structuredClone(snippets),
+        snippetDiagnostics: structuredClone(snippetDiagnostics),
+        snippetKeys: { ...snippetKeys },
+        dependencies: [...dependencies],
         invoke: async (id, context) => {
           const handler = handlers.get(id)
           if (!handler) throw new Error(`Unknown user command "${id}".`)
@@ -313,7 +369,7 @@ export async function loadUserConfig(configPath: string): Promise<LoadedUserConf
     await fs.access(configPath)
   } catch (error) {
     if (isMissingFileError(error)) {
-      const runtime = createRuntime()
+      const runtime = createRuntime(configPath)
       return runtime.finish()
     }
     throw error
@@ -322,10 +378,12 @@ export async function loadUserConfig(configPath: string): Promise<LoadedUserConf
   const moduleUrl = `${pathToFileURL(configPath).href}?zennotes_reload=${Date.now()}-${Math.random()}`
   const loaded = (await import(moduleUrl)) as { default?: unknown }
   if (typeof loaded.default !== 'function') {
-    throw new Error('init.mjs must default-export a setup function: export default function setup(zen) { … }')
+    throw new Error(
+      'init.mjs must default-export a setup function: export default function setup(zen) { … }'
+    )
   }
 
-  const runtime = createRuntime()
+  const runtime = createRuntime(configPath)
   await loaded.default(runtime.api)
   return runtime.finish()
 }

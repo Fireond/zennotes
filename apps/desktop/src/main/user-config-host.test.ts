@@ -25,7 +25,12 @@ vi.mock('electron', () => ({
 import { DEFAULT_USER_CONFIG_SOURCE, UserConfigHost } from './user-config-host'
 
 type LoadResult =
-  | { ok: true; mappings: UserVimMapping[]; commands: Array<{ id: string; title: string }> }
+  | {
+      ok: true
+      mappings: UserVimMapping[]
+      commands: Array<{ id: string; title: string }>
+      dependencies?: string[]
+    }
   | { ok: false; error: string }
 
 class FakeUtilityProcess extends EventEmitter {
@@ -47,10 +52,23 @@ class FakeUtilityProcess extends EventEmitter {
           this.emit('message', {
             type: 'ready',
             mappings: this.loadResult.mappings,
-            commands: this.loadResult.commands
+            commands: this.loadResult.commands,
+            snippets: [],
+            snippetDiagnostics: [],
+            snippetKeys: {
+              expandOrJump: null,
+              jumpBackward: null,
+              nextChoice: null,
+              previousChoice: null,
+              storeSelection: null
+            },
+            dependencies: this.loadResult.dependencies ?? []
           })
         } else {
-          this.emit('message', { type: 'load-error', error: this.loadResult.error })
+          this.emit('message', {
+            type: 'load-error',
+            error: this.loadResult.error
+          })
         }
       })
       return
@@ -109,7 +127,11 @@ describe('UserConfigHost', () => {
     const first = new FakeUtilityProcess({
       ok: true,
       mappings: [
-        { mode: 'n', lhs: 'H', target: { type: 'keys', keys: '^', recursive: false } }
+        {
+          mode: 'n',
+          lhs: 'H',
+          target: { type: 'keys', keys: '^', recursive: false }
+        }
       ],
       commands: [{ id: 'user.upper', title: 'Uppercase' }]
     })
@@ -128,12 +150,16 @@ describe('UserConfigHost', () => {
       DEFAULT_USER_CONFIG_SOURCE
     )
 
-    const broken = new FakeUtilityProcess({ ok: false, error: 'SyntaxError: unexpected token' })
+    const broken = new FakeUtilityProcess({
+      ok: false,
+      error: 'SyntaxError: unexpected token'
+    })
     electronState.queue.push(broken)
     const retained = await host.reload()
 
     expect(retained.mappings).toEqual(loaded.mappings)
     expect(retained.commands).toEqual(loaded.commands)
+    expect(retained.snippetRevision).toBe(loaded.snippetRevision)
     expect(retained.error).toContain('unexpected token')
     expect(first.killed).toBe(false)
     expect(broken.killed).toBe(true)
@@ -149,7 +175,11 @@ describe('UserConfigHost', () => {
   it('atomically replaces the old process after a successful reload', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zennotes-user-host-'))
     tempDirs.push(dir)
-    const first = new FakeUtilityProcess({ ok: true, mappings: [], commands: [] })
+    const first = new FakeUtilityProcess({
+      ok: true,
+      mappings: [],
+      commands: []
+    })
     electronState.queue.push(first)
     const host = new UserConfigHost({
       configPath: path.join(dir, 'init.mjs'),
@@ -168,6 +198,7 @@ describe('UserConfigHost', () => {
 
     expect(reloaded.error).toBeNull()
     expect(reloaded.mappings).toHaveLength(1)
+    expect(reloaded.snippetRevision).toBe(2)
     expect(first.killed).toBe(true)
     expect(second.killed).toBe(false)
   })
@@ -194,7 +225,9 @@ describe('UserConfigHost', () => {
     hosts.push(host)
     await host.start()
 
-    await expect(host.invoke('user.upper', context())).resolves.toMatchObject({ ok: false })
+    await expect(host.invoke('user.upper', context())).resolves.toMatchObject({
+      ok: false
+    })
     await vi.waitFor(() => expect(host.getSnapshot().error).toBeNull())
 
     recovered.invocation = {
@@ -202,5 +235,41 @@ describe('UserConfigHost', () => {
       result: { edits: [{ from: 0, to: 3, insert: 'ABC' }] }
     }
     await expect(host.invoke('user.upper', context())).resolves.toEqual(recovered.invocation)
+  })
+
+  it('reloads when a successfully imported LuaSnip dependency changes', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'zennotes-user-host-'))
+    tempDirs.push(dir)
+    const dependency = path.join(dir, 'snippets.lua')
+    await fs.writeFile(dependency, 'return {}', 'utf8')
+    const first = new FakeUtilityProcess({
+      ok: true,
+      mappings: [],
+      commands: [],
+      dependencies: [dependency]
+    })
+    const second = new FakeUtilityProcess({
+      ok: true,
+      mappings: [],
+      commands: [],
+      dependencies: [dependency]
+    })
+    electronState.queue.push(first)
+    const host = new UserConfigHost({
+      configPath: path.join(dir, 'init.mjs'),
+      workerPath: '/fake/user-config-worker.js'
+    })
+    hosts.push(host)
+    await host.start()
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    electronState.queue.push(second)
+    await fs.writeFile(dependency, 'return { }\n', 'utf8')
+
+    await vi.waitFor(() => expect(host.getSnapshot().snippetRevision).toBe(2), {
+      timeout: 2_000
+    })
+    expect(first.killed).toBe(true)
+    expect(second.killed).toBe(false)
   })
 })

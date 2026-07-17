@@ -66,10 +66,15 @@ import {
 } from '../lib/user-command-execution'
 import { useToastStore } from '../lib/toast'
 import { toVimSequence } from '../lib/vim-key-sequence'
+import {
+  mergeSnippetKeyMappings,
+  summarizeSnippetDiagnostics
+} from '../lib/user-snippet-integration'
 
 let vimCommandsRegistered = false
 let syncedVimBindings: Partial<Record<KeymapId, string[]>> = {}
 let lastReportedUserConfigErrorRevision = -1
+let lastReportedSnippetDiagnosticsRevision = -1
 
 const DEFAULT_VIM_MAPPINGS_TO_CLEAR = [
   'gd',
@@ -1426,10 +1431,14 @@ export function Editor(): JSX.Element {
         clearUserVimMappings()
         return
       }
-      applyUserVimMappings(expandUserLeaderMappings(latest.mappings, keymapOverrides), {
-        runCommand: executeUserVimCommand,
-        onCommandError: reportUserVimCommandError
-      })
+      const mappings = mergeSnippetKeyMappings(latest.snippetKeys, latest.mappings)
+      applyUserVimMappings(
+        expandUserLeaderMappings(mappings, keymapOverrides),
+        {
+          runCommand: executeUserVimCommand,
+          onCommandError: reportUserVimCommandError
+        }
+      )
     }
     const applySnapshot = (next: ReturnType<typeof getUserConfigSnapshot>): void => {
       if (!active) return
@@ -1445,6 +1454,11 @@ export function Editor(): JSX.Element {
       if (next.error && next.revision !== lastReportedUserConfigErrorRevision) {
         lastReportedUserConfigErrorRevision = next.revision
         useToastStore.getState().addToast(`User config: ${next.error}`, 'error')
+      }
+      if (next.snippetRevision !== lastReportedSnippetDiagnosticsRevision) {
+        lastReportedSnippetDiagnosticsRevision = next.snippetRevision
+        const summary = summarizeSnippetDiagnostics(next.snippetDiagnostics)
+        if (summary) useToastStore.getState().addToast(summary, 'info')
       }
     }
 

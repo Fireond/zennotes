@@ -17,8 +17,49 @@ Upstream baseline: ZenNotes v2.13.5, merged by `96e8ed5`
 | Unbound configurable actions | `56dc71d` | Allows a Settings keymap to be explicitly unbound instead of always requiring a replacement key. |
 | Global editor view mode | `b0db7b2` | Makes Edit/Split/Preview a global preference instead of a per-file setting. |
 | Programmable Vim configuration | `5ad424c` | Loads desktop `init.mjs` mappings and user commands, including buffer selection/read/write APIs for scripts. See `docs/reference/programmable-vim-config.md`. |
+| LuaSnip Markdown migration | `feat(editor): import LuaSnip Markdown snippets` (this document's commit) | Statically imports LuaSnip `markdown`, inherited groups such as `tex_shared`, and `all` into the main editor, with autosnippets, fields, choices, mirrors, captures, selected text, contexts, and Vim-style control keys. |
 | Flash-style Vim motions | `aab45c7` | Adds case-insensitive incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
 | TikZ diagrams | `feat(desktop): render TikZ diagrams` (this document's commit) | Renders fenced `tikz` blocks in Preview, Split, export, and Edit live preview. |
+
+## LuaSnip compatibility import
+
+The desktop `init.mjs` API exposes a safe static importer:
+
+```js
+await zen.snippets.importLuaSnip({
+  root: '~/.config/nvim/LuaSnip',
+  filetype: 'markdown',
+  extend: ['tex_shared'],
+  keys: {
+    expandOrJump: 'fj',
+    jumpBackward: 'fk',
+    nextChoice: '<C-h>',
+    previousChoice: '<C-p>',
+    storeSelection: '`'
+  }
+})
+```
+
+`apps/desktop/src/main/user-luasnip-importer.ts` parses the supported LuaSnip
+AST subset without executing Lua. The user-config worker returns declarative
+snippet data and watched dependencies; the host preserves the previous working
+generation on a failed reload. `snippetRevision` changes only after successful
+loads, so a parse failure cannot tear down live editor sessions.
+
+`packages/app-core/src/lib/cm-user-snippets.ts` owns native CodeMirror
+expansion and sessions. `packages/app-core/src/lib/user-snippet-integration.ts`
+wires the engine to Vim mappings and local commands. Each main `EditorPane`
+subscribes separately, so split panes receive live updates. Explicit
+`zen.keymap` declarations take precedence over importer-provided keys.
+Omitted `i(0)` nodes are synthesized at the rendered snippet end, and
+autosnippet expansion is isolated from trigger typing in undo history.
+
+The effective local Markdown corpus has been validated as 415 definitions: 407
+automatic and 8 manual snippets, loaded from `markdown`, `tex_shared`, and
+`all`. Duplicate manual triggers remain reachable as choice alternatives.
+Keep the real snippet files outside this repository; the tracked code
+contains the compatibility layer and tests, not a copied snapshot of a user's
+dotfiles.
 
 ## TikZ implementation
 
@@ -64,6 +105,24 @@ Edit-mode behavior:
   contained in the diagram surface.
 
 ## Validation commands
+
+Run the programmable-snippet checks with:
+
+```sh
+ZENNOTES_LUASNIP_TEST_ROOT="$HOME/.config/nvim/LuaSnip" \
+  env NODE_ENV=test npm run test:run --workspace @zennotes/desktop -- \
+  src/main/user-luasnip-importer.test.ts \
+  src/main/user-config-runtime.test.ts \
+  src/main/user-config-host.test.ts
+
+env NODE_ENV=test npm run test:run --workspace @zennotes/app-core -- \
+  src/lib/cm-user-snippets.test.ts \
+  src/lib/user-snippet-integration.test.ts \
+  src/lib/user-command-execution.test.ts \
+  src/lib/user-vim-keymaps.test.ts \
+  src/lib/user-vim-keymaps.integration.test.ts \
+  src/lib/cm-markdown-snippets.test.ts
+```
 
 Run focused TikZ and editor integration checks with:
 

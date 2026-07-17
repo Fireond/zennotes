@@ -22,7 +22,7 @@ export const DEFAULT_USER_CONFIG_SOURCE = `// ZenNotes programmable Vim configur
 // This is trusted local JavaScript with normal Node.js access. Changes reload live.
 // Reference: docs/reference/programmable-vim-config.md in the ZenNotes source tree.
 
-export default function setup(zen) {
+export default async function setup(zen) {
   // Neovim-style motions:
   // zen.keymap.set('n', 'H', '^')
   // zen.keymap.set('n', 'L', '$')
@@ -40,6 +40,20 @@ export default function setup(zen) {
   //   run(text) { return text.toUpperCase() }
   // })
   // zen.keymap.set('v', '<leader>u', zen.command('user.uppercase-selection'))
+
+  // Statically import LuaSnip files without executing their Lua code:
+  // await zen.snippets.importLuaSnip({
+  //   root: '~/.config/nvim/LuaSnip',
+  //   filetype: 'markdown',
+  //   extend: ['tex_shared'],
+  //   keys: {
+  //     expandOrJump: 'fj',
+  //     jumpBackward: 'fk',
+  //     nextChoice: '<C-h>',
+  //     previousChoice: '<C-p>',
+  //     storeSelection: '\`'
+  //   }
+  // })
 }
 `
 
@@ -52,7 +66,9 @@ interface PendingInvocation {
 class WorkerConnection {
   private nextRequestId = 1
   private readonly pending = new Map<number, PendingInvocation>()
-  private loadResolve: ((message: Extract<UserConfigWorkerMessage, { type: 'ready' }>) => void) | null = null
+  private loadResolve:
+    | ((message: Extract<UserConfigWorkerMessage, { type: 'ready' }>) => void)
+    | null = null
   private loadReject: ((error: Error) => void) | null = null
   private loadTimer: ReturnType<typeof setTimeout> | null = null
   private expectedExit = false
@@ -69,9 +85,7 @@ class WorkerConnection {
     child.stderr?.on('data', (chunk) => process.stderr.write(`[user-config] ${String(chunk)}`))
   }
 
-  load(
-    configPath: string
-  ): Promise<Extract<UserConfigWorkerMessage, { type: 'ready' }>> {
+  load(configPath: string): Promise<Extract<UserConfigWorkerMessage, { type: 'ready' }>> {
     return new Promise((resolve, reject) => {
       this.loadResolve = resolve
       this.loadReject = reject
@@ -104,7 +118,9 @@ class WorkerConnection {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId)
-        reject(new Error(`User command "${commandId}" timed out after ${INVOKE_TIMEOUT_MS / 1000}s.`))
+        reject(
+          new Error(`User command "${commandId}" timed out after ${INVOKE_TIMEOUT_MS / 1000}s.`)
+        )
       }, INVOKE_TIMEOUT_MS)
       this.pending.set(requestId, { resolve, reject, timer })
       const message: UserConfigHostMessage = {
@@ -190,6 +206,7 @@ export class UserConfigHost {
   private active: WorkerConnection | null = null
   private candidate: WorkerConnection | null = null
   private watcher: FSWatcher | null = null
+  private watchedDependencies = new Set<string>()
   private watchTimer: ReturnType<typeof setTimeout> | null = null
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null
   private runtimeRecoveryUsed = false
@@ -200,9 +217,19 @@ export class UserConfigHost {
   constructor(private readonly options: UserConfigHostOptions) {
     this.snapshot = {
       revision: 0,
+      snippetRevision: 0,
       configPath: options.configPath,
       mappings: [],
       commands: [],
+      snippets: [],
+      snippetDiagnostics: [],
+      snippetKeys: {
+        expandOrJump: null,
+        jumpBackward: null,
+        nextChoice: null,
+        previousChoice: null,
+        storeSelection: null
+      },
       error: null
     }
   }
@@ -228,9 +255,7 @@ export class UserConfigHost {
   }
 
   private enqueueReload(): Promise<UserConfigSnapshot> {
-    const next = this.reloadQueue
-      .catch(() => {})
-      .then(() => this.reloadNow())
+    const next = this.reloadQueue.catch(() => {}).then(() => this.reloadNow())
     this.reloadQueue = next.then(
       () => {},
       () => {}
@@ -271,6 +296,7 @@ export class UserConfigHost {
     this.active = null
     const watcher = this.watcher
     this.watcher = null
+    this.watchedDependencies.clear()
     await watcher?.close().catch(() => {})
   }
 
@@ -303,11 +329,17 @@ export class UserConfigHost {
       })
       previous?.terminate()
 
+      this.updateWatchedDependencies(ready.dependencies)
+
       this.snapshot = {
         revision: this.snapshot.revision + 1,
+        snippetRevision: this.snapshot.snippetRevision + 1,
         configPath: this.options.configPath,
         mappings: ready.mappings,
         commands: ready.commands,
+        snippets: ready.snippets,
+        snippetDiagnostics: ready.snippetDiagnostics,
+        snippetKeys: ready.snippetKeys,
         error: null
       }
       this.publish()
@@ -321,6 +353,7 @@ export class UserConfigHost {
 
   private startWatching(): void {
     void this.watcher?.close().catch(() => {})
+    this.watchedDependencies.clear()
     this.watcher = chokidar.watch(this.options.configPath, {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 150, pollInterval: 50 }
@@ -333,6 +366,22 @@ export class UserConfigHost {
       }, WATCH_DEBOUNCE_MS)
     }
     this.watcher.on('add', schedule).on('change', schedule).on('unlink', schedule)
+  }
+
+  private updateWatchedDependencies(dependencies: string[]): void {
+    const watcher = this.watcher
+    if (!watcher) return
+    const configPath = path.resolve(this.options.configPath)
+    const next = new Set(
+      dependencies
+        .map((dependency) => path.resolve(dependency))
+        .filter((dependency) => dependency !== configPath)
+    )
+    const removed = [...this.watchedDependencies].filter((dependency) => !next.has(dependency))
+    const added = [...next].filter((dependency) => !this.watchedDependencies.has(dependency))
+    if (removed.length) void watcher.unwatch(removed)
+    if (added.length) watcher.add(added)
+    this.watchedDependencies = next
   }
 
   private scheduleRuntimeRecovery(): void {

@@ -48,6 +48,58 @@ zen.keymap.set('n', 'Q', null)
 
 `keymap.del(mode, lhs)` only deletes a declaration made earlier in the same `setup` call, so any underlying built-in behavior remains. Use `disable` when that underlying behavior should be replaced by a no-op.
 
+## Import LuaSnip snippets
+
+The desktop editor can statically import a trusted LuaSnip directory without
+starting Neovim or executing Lua. Make the setup function asynchronous and
+name the Markdown filetype plus any groups that your Neovim configuration adds
+with `luasnip.filetype_extend()`:
+
+```js
+export default async function setup(zen) {
+  await zen.snippets.importLuaSnip({
+    root: '~/.config/nvim/LuaSnip',
+    filetype: 'markdown',
+    extend: ['tex_shared'],
+    keys: {
+      expandOrJump: 'fj',
+      jumpBackward: 'fk',
+      nextChoice: '<C-h>',
+      previousChoice: '<C-p>',
+      storeSelection: '`'
+    }
+  })
+}
+```
+
+The importer reads the requested filetype, each `extend` group, and `all.lua`.
+It watches the imported Lua files and reloads them together with `init.mjs`.
+Automatic snippets expand as their trigger is typed; manual snippets expand
+with `expandOrJump`. While a snippet is active, Tab and Shift+Tab also move
+forward and backward through fields. Choice keys cycle alternatives, and the
+same choice keys select among manual definitions that share one trigger (such
+as `iso`, `homeo`, and `homo` in this configuration). The
+visual-mode selection key cuts and stores text for LuaSnip's
+`TM_SELECTED_TEXT`-style dynamic wrappers, leaving the cursor in Insert mode at
+the cut position just as LuaSnip's `store_selection_keys` does.
+
+As in LuaSnip, a definition that omits `i(0)` receives an implicit final exit
+position after all rendered text. Automatic expansion also has its own undo
+boundary: undoing `alp` → `\alpha` restores the literal `alp` trigger first.
+
+This is a compatibility importer, not an embedded Lua runtime. It supports the
+LuaSnip forms used by the bundled-style Markdown/TeX configs: `s`, `autosnippet`,
+`t`, `i`, `c`, `f`, `d`, `fmt`/`fmta`, literal and Lua-pattern triggers,
+captures and mirrors, `os.date`, and the common math/text, line-begin, and
+`tikzcd` conditions. Unsupported executable Lua is skipped with a diagnostic;
+the previous working snippet set remains active if a reload fails. Explicit
+`zen.keymap` declarations made after the import take precedence over imported
+snippet keys.
+
+Imported snippets currently apply to the main note editor only, like the rest
+of `init.mjs`. Template, Quick Capture, external-file, floating-note, and pinned
+reference editors do not load them.
+
 ## Use Flash-style motions
 
 With Vim enabled in the main note editor, the `vim.flashJump` Settings action defaults to `s`. It is available in normal, visual, and operator-pending modes:
@@ -164,4 +216,6 @@ Command results are declarative. `edits` must be in the original snapshot's coor
 
 If the note changes while an asynchronous command is running, ZenNotes rejects the stale result instead of overwriting newer text. Command execution is limited to ten seconds, 1,000 edits, and 8,388,608 UTF-16 code units of inserted text per invocation.
 
-Imported helper modules are evaluated in the fresh process on reload, but only changes to `init.mjs` itself are watched in this first version. Touch or save `init.mjs` after editing a helper module.
+Imported helper modules are evaluated in the fresh process on reload. Lua files
+registered through `zen.snippets.importLuaSnip()` are watched directly; for
+other helper modules, touch or save `init.mjs` after editing them.

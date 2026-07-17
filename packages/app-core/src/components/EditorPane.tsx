@@ -13,7 +13,8 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState
+  useState,
+  useSyncExternalStore
 } from 'react'
 import {
   Annotation,
@@ -37,7 +38,7 @@ import {
   tooltips,
   type KeyBinding
 } from '@codemirror/view'
-import { Vim, getCM, vim } from '@replit/codemirror-vim'
+import { getCM, vim } from '@replit/codemirror-vim'
 import type { AssetMeta, ImportedAsset, NoteComment, NoteFolder } from '@shared/ipc'
 import {
   history,
@@ -111,6 +112,14 @@ import {
 import { setBlockType, toggleWrap, wrapLink } from '../lib/cm-format'
 import { EditorSelectionToolbar } from './EditorSelectionToolbar'
 import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
+import {
+  appUserSnippetExtension,
+  exitVimInsertModeWithSnippetCleanup
+} from '../lib/user-snippet-integration'
+import {
+  getUserConfigSnapshot,
+  subscribeUserConfig
+} from '../lib/user-config-state'
 import { LazyDiagramTabView, LazyPreview as Preview } from './LazyPreview'
 import { ConnectionsPanel } from './ConnectionsPanel'
 import { OutlinePanel } from './OutlinePanel'
@@ -708,6 +717,11 @@ function followEditorLink(target: string): boolean {
 
 export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const paneId = pane.id
+  const userConfigSnapshot = useSyncExternalStore(
+    subscribeUserConfig,
+    getUserConfigSnapshot,
+    getUserConfigSnapshot
+  )
   const isActive = useStore((s) => s.activePaneId === paneId)
   const tabs = pane.tabs
   const pinnedTabs = pane.pinnedTabs
@@ -851,6 +865,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const previewRestoreTargetRef = useRef<{ path: string; top: number } | null>(null)
   const lastProgrammaticPreviewTopRef = useRef<number | null>(null)
   const lastRestoredPathRef = useRef<string | null>(null)
+  const userSnippetCompartmentRef = useRef<Compartment | null>(null)
   const vimCompartmentRef = useRef<Compartment | null>(null)
   const editorKeymapCompartmentRef = useRef<Compartment | null>(null)
   const markdownCompartmentRef = useRef<Compartment | null>(null)
@@ -1542,6 +1557,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
         return
       }
       if (viewRef.current) return
+      const userSnippetCompartment = new Compartment()
       const vimCompartment = new Compartment()
       const editorKeymapCompartment = new Compartment()
       const markdownCompartment = new Compartment()
@@ -1552,6 +1568,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       const scrolloffCompartment = new Compartment()
       const drawSelectionCompartment = new Compartment()
       const historyCompartment = new Compartment()
+      userSnippetCompartmentRef.current = userSnippetCompartment
       vimCompartmentRef.current = vimCompartment
       editorKeymapCompartmentRef.current = editorKeymapCompartment
       markdownCompartmentRef.current = markdownCompartment
@@ -1574,6 +1591,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
         doc: initialBody,
         extensions: [
           appMarkdownSnippetExtension(),
+          userSnippetCompartment.of(
+            appUserSnippetExtension(getUserConfigSnapshot().snippets)
+          ),
           vimCompartment.of(s0.vimMode ? vim() : []),
           inlineFormatKeymap,
           historyCompartment.of(history()),
@@ -1709,11 +1729,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
               }
               if (event.key !== 'Escape') return false
               if (!state.vimMode) return false
-              const cm = getCM(view)
-              if (!cm?.state.vim?.insertMode) return false
+              if (!exitVimInsertModeWithSnippetCleanup(view)) return false
               event.preventDefault()
               event.stopPropagation()
-              Vim.exitInsertMode(cm as Parameters<typeof Vim.exitInsertMode>[0], true)
               return true
             }
           }),
@@ -1939,6 +1957,19 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
       })
     })
   }, [activeCommentId, comments, content?.path])
+
+  // Apply only successful snippet generations. Failed config reloads retain
+  // the last-good snippetRevision and must not tear down a live field session.
+  useEffect(() => {
+    const view = viewRef.current
+    const compartment = userSnippetCompartmentRef.current
+    if (!view || !compartment) return
+    view.dispatch({
+      effects: compartment.reconfigure(
+        appUserSnippetExtension(getUserConfigSnapshot().snippets)
+      )
+    })
+  }, [userConfigSnapshot.snippetRevision])
 
   // Toggle Vim / live-preview / line-numbers via compartments.
   useEffect(() => {

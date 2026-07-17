@@ -15,6 +15,7 @@ import {
 import { isHostedUserCommand } from './user-config-state'
 import type { UserVimCommandInvocation } from './user-vim-keymaps'
 import { USER_VIM_EDITOR_SELECTOR } from './user-vim-keymaps'
+import { runLocalUserSnippetCommand } from './user-snippet-integration'
 import { useStore } from '../store'
 
 interface Cm6Adapter {
@@ -197,6 +198,7 @@ export async function executeUserVimCommand(
   }
 
   const resolvedCommandId = resolveUserCommandId(invocation.commandId)
+  if (runLocalUserSnippetCommand(resolvedCommandId, view)) return
   if (invocation.commandId === 'global.commandPalette') {
     useStore.getState().setCommandPaletteOpen(true)
     return

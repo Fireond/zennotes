@@ -1,6 +1,10 @@
 import type { LoadedUserConfig } from './user-config-runtime'
 import { loadUserConfig } from './user-config-runtime'
-import { errorText, type UserConfigHostMessage, type UserConfigWorkerMessage } from './user-config-protocol'
+import {
+  errorText,
+  type UserConfigHostMessage,
+  type UserConfigWorkerMessage
+} from './user-config-protocol'
 
 const parentPort = process.parentPort
 let runtime: LoadedUserConfig | null = null
@@ -15,7 +19,10 @@ async function handleMessage(message: UserConfigHostMessage): Promise<void> {
 
   if (message.type === 'load') {
     if (loading || runtime) {
-      send({ type: 'load-error', error: 'The user config worker was asked to load more than once.' })
+      send({
+        type: 'load-error',
+        error: 'The user config worker was asked to load more than once.'
+      })
       return
     }
     loading = true
@@ -24,7 +31,11 @@ async function handleMessage(message: UserConfigHostMessage): Promise<void> {
       send({
         type: 'ready',
         mappings: runtime.mappings,
-        commands: runtime.commands
+        commands: runtime.commands,
+        snippets: runtime.snippets,
+        snippetDiagnostics: runtime.snippetDiagnostics,
+        snippetKeys: runtime.snippetKeys,
+        dependencies: runtime.dependencies
       })
     } catch (error) {
       send({ type: 'load-error', error: errorText(error) })

@@ -36,6 +36,9 @@ describe('user config runtime', () => {
 
     expect(runtime.mappings).toEqual([])
     expect(runtime.commands).toEqual([])
+    expect(runtime.snippets).toEqual([])
+    expect(runtime.snippetDiagnostics).toEqual([])
+    expect(runtime.dependencies).toEqual([])
   })
 
   it('collects key, command, and disabled mappings using mode aliases', async () => {
@@ -54,9 +57,21 @@ describe('user config runtime', () => {
     const runtime = await loadUserConfig(configPath)
 
     expect(runtime.mappings).toEqual([
-      { mode: 'n', lhs: 'H', target: { type: 'keys', keys: '^', recursive: false } },
-      { mode: 'n', lhs: 'L', target: { type: 'keys', keys: '$', recursive: false } },
-      { mode: 'n', lhs: '<C-w>', target: { type: 'command', commandId: 'tab.close' } },
+      {
+        mode: 'n',
+        lhs: 'H',
+        target: { type: 'keys', keys: '^', recursive: false }
+      },
+      {
+        mode: 'n',
+        lhs: 'L',
+        target: { type: 'keys', keys: '$', recursive: false }
+      },
+      {
+        mode: 'n',
+        lhs: '<C-w>',
+        target: { type: 'command', commandId: 'tab.close' }
+      },
       { mode: 'v', lhs: 'Q', target: { type: 'disabled' } },
       { mode: 'o', lhs: 'Z', target: { type: 'disabled' } }
     ])
@@ -113,11 +128,16 @@ describe('user config runtime', () => {
   })
 
   it('rejects malformed command results before they cross the process boundary', () => {
-    expect(() => normalizeUserCommandResult({ edits: [{ from: 0, to: 1, insert: 42 }] }))
-      .toThrow('insert must be a string')
+    expect(() => normalizeUserCommandResult({ edits: [{ from: 0, to: 1, insert: 42 }] })).toThrow(
+      'insert must be a string'
+    )
     expect(() =>
       normalizeUserCommandResult({
-        edits: Array.from({ length: 1_001 }, (_, from) => ({ from, to: from, insert: '' }))
+        edits: Array.from({ length: 1_001 }, (_, from) => ({
+          from,
+          to: from,
+          insert: ''
+        }))
       })
     ).toThrow('too many edits')
   })
@@ -141,5 +161,37 @@ describe('user config runtime', () => {
     `)
 
     await expect(loadUserConfig(configPath)).rejects.toThrow('recursive must be a boolean')
+  })
+
+  it('exposes the static LuaSnip importer and snippet-control keys to init.mjs', async () => {
+    const configPath = await tempConfig()
+    const root = path.join(path.dirname(configPath), 'LuaSnip')
+    await fs.mkdir(root)
+    await fs.writeFile(path.join(root, 'all.lua'), 'return { s("hello", t("world")) }', 'utf8')
+    await fs.writeFile(
+      configPath,
+      `export default async function setup(zen) {
+        await zen.snippets.importLuaSnip({
+          root: ${JSON.stringify(root)},
+          filetype: 'markdown',
+          keys: { expandOrJump: 'fj', storeSelection: ${JSON.stringify('`')} }
+        })
+      }`,
+      'utf8'
+    )
+
+    const runtime = await loadUserConfig(configPath)
+
+    expect(runtime.snippets).toHaveLength(1)
+    expect(runtime.snippets[0]).toMatchObject({
+      trigger: { kind: 'literal', value: 'hello' },
+      auto: false,
+      body: [{ type: 'text', text: 'world' }]
+    })
+    expect(runtime.snippetKeys).toMatchObject({
+      expandOrJump: 'fj',
+      storeSelection: '`'
+    })
+    expect(runtime.dependencies).toContain(path.join(root, 'all.lua'))
   })
 })

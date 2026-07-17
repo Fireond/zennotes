@@ -5,9 +5,19 @@ import type {
 
 const EMPTY_USER_CONFIG: UserConfigSnapshot = {
   revision: 0,
+  snippetRevision: 0,
   configPath: '',
   mappings: [],
   commands: [],
+  snippets: [],
+  snippetDiagnostics: [],
+  snippetKeys: {
+    expandOrJump: null,
+    jumpBackward: null,
+    nextChoice: null,
+    previousChoice: null,
+    storeSelection: null
+  },
   error: null
 }
 

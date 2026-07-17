@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
-import { EditorSelection, EditorState } from '@codemirror/state'
+import { EditorSelection, EditorState, type Extension } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { UserCommandInvocation } from '@bridge-contract/user-config'
+import type { UserCommandInvocation, UserSnippet } from '@bridge-contract/user-config'
 
 const mocks = vi.hoisted(() => {
   const state = {
@@ -44,10 +44,12 @@ vi.mock('./user-config-state', () => ({
 }))
 
 import { executeUserVimCommand } from './user-command-execution'
+import { userSnippetExtension } from './cm-user-snippets'
+import { USER_SNIPPET_COMMAND_IDS } from './user-snippet-integration'
 
 const views: EditorView[] = []
 
-function mount(scoped = true): EditorView {
+function mount(scoped = true, extensions: Extension = []): EditorView {
   const pane = document.createElement('div')
   pane.dataset.userVimPaneId = 'pane-2'
   pane.dataset.userVimNotePath = 'notes/example.md'
@@ -57,7 +59,8 @@ function mount(scoped = true): EditorView {
     parent: pane,
     state: EditorState.create({
       doc: 'abc def',
-      selection: EditorSelection.range(0, 3)
+      selection: EditorSelection.range(0, 3),
+      extensions
     })
   })
   views.push(view)
@@ -130,6 +133,37 @@ describe('user command execution', () => {
     })
 
     expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('runs reserved snippet commands in the originating editor without host IPC', async () => {
+    const manual: UserSnippet = {
+      id: 'test:manual',
+      trigger: { kind: 'literal', value: 'def' },
+      auto: false,
+      wordTrig: true,
+      priority: 1000,
+      order: 0,
+      source: { file: 'test.lua', line: 1 },
+      context: { type: 'always' },
+      body: [{ type: 'text', text: 'expanded' }]
+    }
+    const invokeUserCommand = vi.fn()
+    Object.defineProperty(window, 'zen', {
+      configurable: true,
+      value: { invokeUserCommand }
+    })
+    const view = mount(true, userSnippetExtension([manual]))
+    view.dispatch({ selection: EditorSelection.cursor(view.state.doc.length) })
+
+    await executeUserVimCommand({
+      ...invocation(view),
+      commandId: USER_SNIPPET_COMMAND_IDS.expandOrJump,
+      mode: 'i',
+      lhs: 'fj'
+    })
+
+    expect(view.state.doc.toString()).toBe('abc expanded')
+    expect(invokeUserCommand).not.toHaveBeenCalled()
   })
 
   it('supports the Settings command-palette action directly', async () => {
