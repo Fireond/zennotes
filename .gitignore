@@ -14,6 +14,8 @@ apps/server/bin
 !.vscode/extensions.json
 .idea
 .claude/
+.codex/
+.agents/
 *.tsbuildinfo
 data/
 /vault/
