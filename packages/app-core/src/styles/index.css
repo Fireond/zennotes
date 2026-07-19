@@ -2065,8 +2065,32 @@ html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done * 
   border-left: 1px solid rgb(var(--z-grey-0) / 0.13);
   border-right: 1px solid rgb(var(--z-grey-0) / 0.13);
 }
-.cm-editor .cm-frontmatter-line :is(.tok-meta, .tok-string, .tok-keyword, .tok-atom) {
+.cm-editor .cm-frontmatter-line
+  :is(
+    .tok-meta,
+    .tok-string,
+    .tok-keyword,
+    .tok-atom,
+    .tok-heading,
+    .tok-heading1,
+    .tok-heading2,
+    .tok-heading3,
+    .tok-heading4,
+    .tok-heading5,
+    .tok-heading6
+  ) {
   color: inherit;
+}
+/* Without a blank line before the closing `---`, CodeMirror's markdown parser
+ * can tokenize the previous frontmatter line as a setext heading. The metadata
+ * card owns frontmatter presentation, so suppress body heading typography here. */
+.cm-editor .cm-frontmatter-line
+  :is(.tok-heading, .tok-heading1, .tok-heading2, .tok-heading3, .tok-heading4, .tok-heading5, .tok-heading6) {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-transform: none;
+  letter-spacing: 0;
 }
 /* The key (before the `:`) is a muted label; the value keeps the normal color. */
 .cm-editor .cm-frontmatter-key,
