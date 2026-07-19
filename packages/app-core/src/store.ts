@@ -4292,6 +4292,11 @@ export const useStore = create<Store>((set, get) => {
       },
       focusedPanel: 'editor'
     })
+    // Setting focusedPanel above only updates store state; the Tasks view still
+    // holds real DOM focus (opening the source note swaps the pane's content
+    // async), so move keyboard focus to the editor for vim motions / typing.
+    // The event handler retries across the note remount. (#415)
+    requestEditorFocus()
   },
 
   toggleTaskFromList: async (task) => {

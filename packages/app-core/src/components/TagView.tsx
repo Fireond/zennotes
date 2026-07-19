@@ -216,6 +216,13 @@ export function TagView(): JSX.Element {
     ]
   }, [tagMenu, selectedTags, toggleTagSelection, setSelectedTags, vimMode])
 
+  // Activating the Tags tab claims panel focus for the Tags view so pane
+  // navigation and the key handler below agree on where focus is. Fires only on
+  // the activation edge, so a later Ctrl+W to another panel isn't overridden. (#412)
+  useEffect(() => {
+    if (amActive) useStore.getState().setFocusedPanel('tags')
+  }, [amActive])
+
   useEffect(() => {
     if (!amActive) return
     const handler = (e: KeyboardEvent): void => {
@@ -225,6 +232,13 @@ export function TagView(): JSX.Element {
       // While the Vim hint overlay is open it owns the keyboard; don't let
       // tag navigation (or Esc closing the view) steal its keys. (#151)
       if (document.querySelector('[data-vim-hint-overlay]')) return
+      // The Tags tab can stay "active" while pane navigation (Ctrl+W h/j/k/l)
+      // moves keyboard focus to another panel. Once focusedPanel is no longer
+      // 'tags', release the keys so the target panel (e.g. the sidebar) receives
+      // j/k instead of this window-capture listener swallowing them first. A
+      // `null` panel means "no explicit focus yet" — keep handling as before. (#412)
+      const fp = useStore.getState().focusedPanel
+      if (fp != null && fp !== 'tags') return
       const focused = document.activeElement as HTMLElement | null
       if (focused) {
         const t = focused.tagName

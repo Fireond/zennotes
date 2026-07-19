@@ -93,6 +93,7 @@ import { codeBlockFlairPlugin } from '../lib/cm-code-block-flair'
 import { tablePlugin, tableVimEntry } from '../lib/cm-table'
 import { wysiwygBlocksPlugin } from '../lib/cm-wysiwyg-blocks'
 import { hashtagExtension } from '../lib/cm-hashtags'
+import { hashtagSource } from '../lib/cm-hashtag-complete'
 import { applyHighlight, HIGHLIGHT_COLORS, highlightExtension } from '../lib/cm-highlight'
 import { wikilinkRenderExtension } from '../lib/cm-wikilink-render'
 import { mathRenderExtension } from '../lib/cm-math-render'
@@ -849,6 +850,10 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     x: number
     y: number
     hasSelection: boolean
+    // Snapshot the selection at open time; the menu steals focus, so the live
+    // selection can't be trusted when an item (e.g. Highlight) runs. (#416)
+    selFrom: number
+    selTo: number
   } | null>(null)
   const [editorHydration, setEditorHydration] = useState<EditorHydrationState | null>(null)
   const [assetDropActive, setAssetDropActive] = useState(false)
@@ -934,7 +939,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
     setEditorMenu({
       x: pos.x,
       y: pos.y,
-      hasSelection: !sel.empty
+      hasSelection: !sel.empty,
+      selFrom: sel.from,
+      selTo: sel.to
     })
     view.focus()
     return true
@@ -1632,6 +1639,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
               calloutTypeSource,
               dateShortcutSource,
               atNoteSource,
+              hashtagSource,
               wikilinkSource,
               wikilinkHeadingSource
             ],
@@ -3526,7 +3534,9 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
                   setEditorMenu({
                     x: e.clientX,
                     y: e.clientY,
-                    hasSelection: !sel.empty
+                    hasSelection: !sel.empty,
+                    selFrom: sel.from,
+                    selTo: sel.to
                   })
                 }}
                 >
@@ -3665,7 +3675,8 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           items={buildEditorContextItems(
             viewRef.current,
             editorMenu.hasSelection,
-            captureCommentDraft
+            captureCommentDraft,
+            { from: editorMenu.selFrom, to: editorMenu.selTo }
           )}
           onClose={() => setEditorMenu(null)}
         />
@@ -3760,7 +3771,10 @@ function HighlightSwatch({ color }: { color: string }): JSX.Element {
 function buildEditorContextItems(
   view: EditorView | null,
   hasSelection: boolean,
-  onAddComment: () => void
+  onAddComment: () => void,
+  // Selection snapshotted when the menu opened, applied by the highlight actions
+  // so they don't depend on the live selection surviving the menu. (#416)
+  selRange: { from: number; to: number }
 ): ContextMenuItem[] {
   if (!view) return []
 
@@ -3772,18 +3786,18 @@ function buildEditorContextItems(
           label: 'Highlight',
           hint: formatKeyToken('Mod+Shift+H'),
           icon: <HighlighterIcon width={14} height={14} />,
-          onSelect: async () => applyHighlight(view, 'yellow')
+          onSelect: async () => applyHighlight(view, 'yellow', selRange)
         },
         ...HIGHLIGHT_COLORS.filter((c) => c.id !== 'yellow').map(
           (c): ContextMenuItem => ({
             label: `Highlight: ${c.label}`,
             icon: <HighlightSwatch color={c.id} />,
-            onSelect: async () => applyHighlight(view, c.id)
+            onSelect: async () => applyHighlight(view, c.id, selRange)
           })
         ),
         {
           label: 'Remove highlight',
-          onSelect: async () => applyHighlight(view, 'remove')
+          onSelect: async () => applyHighlight(view, 'remove', selRange)
         },
         { kind: 'separator' }
       ]

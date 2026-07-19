@@ -59,6 +59,7 @@ import {
   type ThemeMode,
 } from "../lib/themes";
 import { customThemeSlugFromId } from "../lib/custom-themes";
+import { focusEditorNormalMode } from "../lib/editor-focus";
 import { TrashIcon, ExternalIcon } from "./icons";
 import {
   customThemeSupportsMode,
@@ -1128,18 +1129,27 @@ export function SettingsModal(): JSX.Element {
     return "Current runtime backend: Built-in, because no external search tool is available.";
   }, [vaultTextSearchBackend, vaultTextSearchCapabilities]);
 
+  // Dismiss Settings and hand keyboard focus back to the editor so vim motions
+  // and typing work immediately, matching how the palette modals close. Used by
+  // the explicit dismiss actions (Esc, backdrop, Done) — not the "learn how"
+  // link, which navigates to the Help view and manages its own focus. (#415)
+  const closeSettings = useCallback((): void => {
+    setSettingsOpen(false);
+    focusEditorNormalMode();
+  }, [setSettingsOpen]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       // Don't close Settings on Esc while a nested editor/modal is open —
       // that would discard in-progress work (e.g. a template draft). Those
       // modals handle Esc themselves (Vim normal mode, etc.).
       if (e.key === "Escape" && !templateEditor && !editingRemoteProfile) {
-        setSettingsOpen(false);
+        closeSettings();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setSettingsOpen, templateEditor, editingRemoteProfile]);
+  }, [closeSettings, templateEditor, editingRemoteProfile]);
 
   useEffect(() => {
     return () => {
@@ -4261,7 +4271,7 @@ export function SettingsModal(): JSX.Element {
       <div
         data-settings-modal-backdrop
         className="fixed inset-0 z-modal flex items-start justify-center bg-black/45 px-4 pt-[7vh]"
-        onClick={() => setSettingsOpen(false)}
+        onClick={() => closeSettings()}
       >
         <div
           ref={ref}
@@ -4425,7 +4435,7 @@ export function SettingsModal(): JSX.Element {
               <Button
                 variant="secondary"
                 size="md"
-                onClick={() => setSettingsOpen(false)}
+                onClick={() => closeSettings()}
                 className="shrink-0"
               >
                 Done
