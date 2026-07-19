@@ -21,6 +21,7 @@ Upstream baseline: ZenNotes v2.14.0 (`8025f63`)
 | LaTeX source highlighting | `feat(editor): highlight LaTeX math source` (this document's commit) | Gives editable math a distinct theme color and syntax-colors commands, operators, numbers, brackets, and comments without exposing formula-internal Markdown syntax. |
 | Flash-style Vim motions | `aab45c7` | Adds case-insensitive incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
 | TikZ Edit-mode preview and isolated compiler | `feat(desktop): render TikZ diagrams` (this document's commit) | Extends upstream's Preview/Split/export renderer with Edit-mode widgets and navigation, plus a bounded utility worker with timeout, caching, sanitization, and crash recovery. |
+| Packaged renderer isolation | `fix(desktop): ignore dev renderer URL when packaged` (this document's commit) | Makes packaged builds always load their bundled renderer, even when the launching shell exports electron-vite's `ELECTRON_RENDERER_URL`. |
 
 ## LuaSnip compatibility import
 

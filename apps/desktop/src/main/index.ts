@@ -198,6 +198,7 @@ import {
   resolveMarkdownOpenTarget
 } from './file-open'
 import { UserConfigHost } from './user-config-host'
+import { resolveDevelopmentRendererUrl } from './renderer-runtime'
 import type {
   UserCommandContext,
   UserCommandInvocation,
@@ -210,6 +211,10 @@ const nodeRequire = createRequire(import.meta.url)
 // First point our code runs: everything before this is Electron/Node binary
 // startup (and, on Linux AppImages, the runtime's FUSE mount).
 recordBootMark('main.boot.module-loaded')
+const developmentRendererUrl = resolveDevelopmentRendererUrl(
+  app.isPackaged,
+  process.env['ELECTRON_RENDERER_URL']
+)
 const LOCAL_ASSET_SCHEME = 'zen-asset'
 const THEME_ASSET_SCHEME = 'zen-theme'
 const EXCALIDRAW_ASSET_SCHEME = 'zen-excalidraw'
@@ -664,7 +669,7 @@ function openExternalFileWindow(absPath: string): void {
   applyZoomFactor(win, currentZoomFactor)
 
   const params = `?externalFile=${encodeURIComponent(resolved)}`
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  const devServerUrl = developmentRendererUrl
   if (devServerUrl) {
     void win.loadURL(`${devServerUrl}${params}`)
   } else {
@@ -820,7 +825,7 @@ function mimeTypeForPath(absPath: string): string {
 
 function isTrustedRendererUrl(url: string): boolean {
   if (!url) return false
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  const devServerUrl = developmentRendererUrl
   if (devServerUrl) {
     return url.startsWith(devServerUrl)
   }
@@ -1152,7 +1157,7 @@ async function createWindow(options: CreateWindowOptions = {}): Promise<BrowserW
     }
   }
 
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  const devServerUrl = developmentRendererUrl
   if (devServerUrl) {
     void win.loadURL(devServerUrl)
   } else {
@@ -1675,7 +1680,7 @@ async function exportNotePdf(
     installNavigationGuards(exportWindow)
     applyZoomFactor(exportWindow, currentZoomFactor)
     const params = `?exportNote=${encodeURIComponent(relPath)}`
-    const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+    const devServerUrl = developmentRendererUrl
     if (devServerUrl) {
       await exportWindow.loadURL(`${devServerUrl}${params}`)
     } else {
@@ -3143,7 +3148,7 @@ function openFloatingNoteWindow(relPath: string): void {
   }
 
   const params = `?floating=1&note=${encodeURIComponent(relPath)}`
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  const devServerUrl = developmentRendererUrl
   if (devServerUrl) {
     void win.loadURL(`${devServerUrl}${params}`)
   } else {
@@ -3247,7 +3252,7 @@ async function ensureQuickCaptureWindow(): Promise<BrowserWindow> {
   }
 
   const params = '?quickCapture=1'
-  const devServerUrl = process.env['ELECTRON_RENDERER_URL']
+  const devServerUrl = developmentRendererUrl
   if (devServerUrl) {
     void win.loadURL(`${devServerUrl}${params}`)
   } else {
