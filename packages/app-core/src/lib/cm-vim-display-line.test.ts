@@ -79,7 +79,7 @@ describe('zenMoveByDisplayLine around rendered block math', () => {
     args: MotionArgs,
     findPosVResult: { line: number; ch: number }
   ): { res: { line: number; ch: number }; findPosV: ReturnType<typeof vi.fn> } {
-    const state = EditorState.create({ doc, extensions: [mathRenderExtension] })
+    const state = EditorState.create({ doc, extensions: [mathRenderExtension('katex')] })
     const findPosV = vi.fn(() => findPosVResult)
     const cm = {
       firstLine: () => 0,

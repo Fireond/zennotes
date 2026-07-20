@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { NoteMeta } from "@shared/ipc";
-import { renderMarkdown } from "../lib/markdown";
+import { renderMarkdown, setMarkdownMathRenderer } from "../lib/markdown";
 import { expandEmbeds, hasNoteEmbeds } from "../lib/transclusion";
 import { useStore } from "../store";
 import { resolveAuto, THEMES } from "../lib/themes";
@@ -26,6 +26,7 @@ import { resolveExcalidrawEmbedPath } from "../lib/excalidraw-preview";
 import { LazyExcalidrawPreview } from "./LazyExcalidrawPreview";
 import { enhancePreviewHeadingFolds } from "../lib/preview-heading-fold";
 import { renderDiagrams } from "../lib/diagram-renderers";
+import { renderTypstMath } from "../lib/typst-math-render";
 import { attachInlineDiagramPanZoom } from "../lib/inline-diagram-pan-zoom";
 import {
   CODE_COPY_BUTTON_SELECTOR,
@@ -381,6 +382,7 @@ export const Preview = memo(function Preview({
   onRendered?: (() => void) | null;
 }): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
+  const mathRenderer = useStore((s) => s.mathRenderer);
   const vault = useStore((s) => s.vault);
   const notes = useStore((s) => s.notes);
   const folders = useStore((s) => s.folders);
@@ -504,10 +506,12 @@ export const Preview = memo(function Preview({
   const embedsReadyRef = useRef(embedsReady);
   embedsReadyRef.current = embedsReady;
 
-  const html = useMemo(
-    () => renderMarkdown(expandedForCurrent ?? markdown),
-    [expandedForCurrent, markdown],
-  );
+  const html = useMemo(() => {
+    // Point the pipeline at the active engine before rendering, so a toggle
+    // takes effect on the very next render without an effect-ordering race.
+    setMarkdownMathRenderer(mathRenderer);
+    return renderMarkdown(expandedForCurrent ?? markdown);
+  }, [expandedForCurrent, markdown, mathRenderer]);
   const assetFilesKey = useMemo(
     () => assetFiles.map((asset) => asset.path).join("\n"),
     [assetFiles],
@@ -891,6 +895,11 @@ export const Preview = memo(function Preview({
       // it is safe to render in the detached buffer above.
       root.replaceChildren(...Array.from(stage.childNodes));
       await renderDiagrams(root, { themeKey: effectiveMode, expanded: false });
+      if (cancelled) return;
+      // Typst math (a no-op when the KaTeX renderer is active, since it emits no
+      // `.zen-typst-math` placeholders). Recolored to currentColor, so a theme
+      // switch needs no re-render.
+      await renderTypstMath(root);
       if (cancelled) return;
       renderExcalidrawEmbeds(root);
       requestAnimationFrame(() => {

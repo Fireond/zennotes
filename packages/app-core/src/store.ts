@@ -84,6 +84,7 @@ import {
   defaultTimeFormat,
   type AppConfigPortable,
   type CompletedTaskStyle,
+  type MathRenderer,
   type TimeFormat
 } from '@shared/app-config'
 import {
@@ -391,6 +392,9 @@ interface Prefs {
   /** How a completed task's text is styled (strike / gray / both / none) in the
    *  editor and preview. Applied via `html[data-completed-task-style]`. */
   completedTaskStyle: CompletedTaskStyle
+  /** Typesetter for `$…$` / `$$…$$` math (KaTeX or Typst), in both the editor
+   *  live preview and the reading view. */
+  mathRenderer: MathRenderer
   /** Keep the current view mode (Edit / Split / Preview) when switching notes
    *  instead of resolving each note's own last mode. Off = per-note (default). */
   keepViewModeAcrossNotes: boolean
@@ -714,6 +718,7 @@ export const DEFAULT_PREFS: Prefs = {
   livePreview: true,
   renderTablesInLivePreview: true,
   completedTaskStyle: 'none',
+  mathRenderer: 'katex',
   keepViewModeAcrossNotes: false,
   markdownSnippets: true,
   hideBuiltinTemplates: false,
@@ -841,6 +846,10 @@ function normalizePrefs(p: Partial<Prefs>): Prefs {
       p.completedTaskStyle === 'none'
         ? p.completedTaskStyle
         : DEFAULT_PREFS.completedTaskStyle,
+    mathRenderer:
+      p.mathRenderer === 'typst' || p.mathRenderer === 'katex'
+        ? p.mathRenderer
+        : DEFAULT_PREFS.mathRenderer,
     keepViewModeAcrossNotes:
       typeof p.keepViewModeAcrossNotes === 'boolean'
         ? p.keepViewModeAcrossNotes
@@ -1608,6 +1617,7 @@ function collectPrefs(s: {
   livePreview: boolean
   renderTablesInLivePreview: boolean
   completedTaskStyle: CompletedTaskStyle
+  mathRenderer: MathRenderer
   keepViewModeAcrossNotes: boolean
   markdownSnippets: boolean
   hideBuiltinTemplates: boolean
@@ -1680,6 +1690,7 @@ function collectPrefs(s: {
     livePreview: s.livePreview,
     renderTablesInLivePreview: s.renderTablesInLivePreview,
     completedTaskStyle: s.completedTaskStyle,
+    mathRenderer: s.mathRenderer,
     keepViewModeAcrossNotes: s.keepViewModeAcrossNotes,
     markdownSnippets: s.markdownSnippets,
     hideBuiltinTemplates: s.hideBuiltinTemplates,
@@ -2130,6 +2141,7 @@ interface Store {
   livePreview: boolean
   renderTablesInLivePreview: boolean
   completedTaskStyle: CompletedTaskStyle
+  mathRenderer: MathRenderer
   keepViewModeAcrossNotes: boolean
   /** Auto-close markdown delimiters while typing. Persisted. */
   markdownSnippets: boolean
@@ -2508,6 +2520,7 @@ interface Store {
   setLivePreview: (on: boolean) => void
   setRenderTablesInLivePreview: (on: boolean) => void
   setCompletedTaskStyle: (style: CompletedTaskStyle) => void
+  setMathRenderer: (renderer: MathRenderer) => void
   setKeepViewModeAcrossNotes: (on: boolean) => void
   setMarkdownSnippets: (on: boolean) => void
   setHideBuiltinTemplates: (hidden: boolean) => void
@@ -3655,6 +3668,7 @@ export const useStore = create<Store>((set, get) => {
   livePreview: loadPrefs().livePreview,
   renderTablesInLivePreview: loadPrefs().renderTablesInLivePreview,
   completedTaskStyle: loadPrefs().completedTaskStyle,
+  mathRenderer: loadPrefs().mathRenderer,
   keepViewModeAcrossNotes: loadPrefs().keepViewModeAcrossNotes,
   markdownSnippets: loadPrefs().markdownSnippets,
   hideBuiltinTemplates: loadPrefs().hideBuiltinTemplates,
@@ -5670,6 +5684,10 @@ export const useStore = create<Store>((set, get) => {
   },
   setCompletedTaskStyle: (style) => {
     set({ completedTaskStyle: style })
+    savePrefs(collectPrefs(get()))
+  },
+  setMathRenderer: (renderer) => {
+    set({ mathRenderer: renderer })
     savePrefs(collectPrefs(get()))
   },
   setKeepViewModeAcrossNotes: (on) => {

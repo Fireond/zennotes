@@ -45,6 +45,8 @@ const ALLOWED_RENDERED_DATA_ATTRS = [
   'data-resolved-path',
   'data-tag',
   'data-tikz-source',
+  'data-typst-display',
+  'data-typst-source',
   'data-wikilink',
   'data-zen-diagram-expanded',
   'data-zen-diagram-kind',
@@ -529,26 +531,93 @@ function remarkCurrencyGuard() {
   }
 }
 
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkFrontmatter, ['yaml', 'toml'])
-  .use(remarkGfm)
-  .use(remarkBreaks)
-  .use(remarkMath)
-  .use(remarkCurrencyGuard)
-  .use(remarkWikilinks)
-  .use(remarkHashtags)
-  .use(remarkHighlight)
-  .use(remarkCallouts)
-  .use(remarkSourceLines)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeRaw)
-  .use(rehypeTableColWidths)
-  .use(rehypeMermaid)
-  .use(rehypeMathDiagrams)
-  .use(rehypeHighlight, { detect: true, ignoreMissing: true })
-  .use(rehypeKatex)
-  .use(rehypeStringify)
+/**
+ * Remark plugin (Typst renderer only): rewrite `$…$` / `$$…$$` math nodes into
+ * `.zen-typst-math` placeholders carrying the raw Typst source, instead of
+ * letting rehype-katex bake KaTeX HTML. The runtime (`renderTypstMath` in
+ * `typst-math-render.ts`, invoked from Preview.tsx) fills each placeholder with
+ * a compiled SVG (the same placeholder-then-render pattern the diagram blocks
+ * use). Runs after remark-math so the math nodes already exist.
+ */
+function remarkTypstMathPlaceholders() {
+  return (tree: MdRoot): void => {
+    visit(tree, ['math', 'inlineMath'], (node) => {
+      const mathNode = node as AnyNode & { value?: string; data?: Record<string, unknown> }
+      const display = mathNode.type === 'math'
+      const value = String(mathNode.value ?? '')
+      const data = (mathNode.data ??= {})
+      data.hName = display ? 'div' : 'span'
+      data.hProperties = {
+        className: display
+          ? ['zen-typst-math', 'zen-typst-display']
+          : ['zen-typst-math'],
+        'data-typst-source': value,
+        'data-typst-display': display ? 'true' : 'false'
+      }
+      data.hChildren = [{ type: 'text', value }]
+    })
+  }
+}
+
+/**
+ * Build the markdown → HTML processor for a given math renderer. Everything is
+ * shared except the math step: KaTeX bakes formulas into HTML via rehype-katex;
+ * Typst emits placeholders (rehype-katex is omitted) for the runtime to render.
+ */
+function createProcessor(mathRenderer: 'katex' | 'typst') {
+  const base = unified()
+    .use(remarkParse)
+    .use(remarkFrontmatter, ['yaml', 'toml'])
+    .use(remarkGfm)
+    .use(remarkBreaks)
+    .use(remarkMath)
+    .use(remarkCurrencyGuard)
+
+  const withTypst =
+    mathRenderer === 'typst' ? base.use(remarkTypstMathPlaceholders) : base
+
+  const rehyped = withTypst
+    .use(remarkWikilinks)
+    .use(remarkHashtags)
+    .use(remarkHighlight)
+    .use(remarkCallouts)
+    .use(remarkSourceLines)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
+    .use(rehypeTableColWidths)
+    .use(rehypeMermaid)
+    .use(rehypeMathDiagrams)
+    .use(rehypeHighlight, { detect: true, ignoreMissing: true })
+
+  const withKatex =
+    mathRenderer === 'katex' ? rehyped.use(rehypeKatex) : rehyped
+
+  return withKatex.use(rehypeStringify)
+}
+
+const katexProcessor = createProcessor('katex')
+let typstProcessor: ReturnType<typeof createProcessor> | null = null
+
+// Which typesetter `renderMarkdown` uses. Driven by the `mathRenderer` setting
+// (App.tsx pushes changes here). Default KaTeX keeps existing notes unchanged.
+let activeMathRenderer: 'katex' | 'typst' = 'katex'
+
+/**
+ * Point the preview pipeline at KaTeX or Typst. Clears the render cache so the
+ * current note re-renders under the new engine on the next `renderMarkdown`.
+ */
+export function setMarkdownMathRenderer(mathRenderer: 'katex' | 'typst'): void {
+  if (mathRenderer === activeMathRenderer) return
+  activeMathRenderer = mathRenderer
+  markdownRenderCache.clear()
+}
+
+function activeProcessor() {
+  if (activeMathRenderer === 'typst') {
+    return (typstProcessor ??= createProcessor('typst'))
+  }
+  return katexProcessor
+}
 
 const MARKDOWN_RENDER_CACHE_LIMIT = 24
 const markdownRenderCache = new Map<string, string>()
@@ -721,7 +790,11 @@ export function renderMarkdown(src: string): string {
   const startedAt = performance.now()
   try {
     const html = sanitizeRenderedHtml(
-      String(processor.processSync(escapeTableMathPipes(normalizeBlockMathFences(src))))
+      String(
+        activeProcessor().processSync(
+          escapeTableMathPipes(normalizeBlockMathFences(src))
+        )
+      )
     )
     cacheRenderedMarkdown(src, html)
     recordRendererPerf('markdown.render', performance.now() - startedAt, {

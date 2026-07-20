@@ -16,9 +16,18 @@
  * WYSIWYG-only: registered via `wysiwygExtensions()`.
  */
 import { syntaxTree } from '@codemirror/language'
-import { RangeSetBuilder, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { Facet, RangeSetBuilder, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import katex from 'katex'
+import type { MathRenderer } from '@shared/app-config'
+import { peekTypstMathSvg, renderTypstMathToSvg } from './typst-math-render'
+
+/** Which typesetter the live-preview widgets use. Supplied by
+ *  `mathRenderExtension(renderer)` and re-read whenever the editor reconfigures
+ *  it (see the facet check in `mathRenderField.update`). */
+const mathRendererFacet = Facet.define<MathRenderer, MathRenderer>({
+  combine: (values) => (values.length ? values[values.length - 1] : 'katex')
+})
 
 // Inline `$…$`: a single dollar (not `$$`), opening not escaped or space-led,
 // closing not space-trailed. Mirrors remark-math so currency like `$5` is left
@@ -36,17 +45,56 @@ function renderKatex(el: HTMLElement, latex: string, display: boolean): void {
   }
 }
 
+function showTypstError(el: HTMLElement, latex: string, display: boolean, message: string): void {
+  el.textContent = display ? `$$${latex}$$` : `$${latex}$`
+  el.classList.add('cm-math-error')
+  el.title = `Typst error: ${message}`
+}
+
+/**
+ * Render Typst math into `el`. A cached formula paints synchronously; otherwise
+ * the element stays empty for one frame and fills when the WASM compiler
+ * resolves (instant after the first render warms it up). The `latex`/`display`
+ * captured in the closure are re-checked so a stale async result can't overwrite
+ * a widget that has since been recycled to different content.
+ */
+function renderTypst(el: HTMLElement, latex: string, display: boolean): void {
+  const cached = peekTypstMathSvg(latex, display)
+  if (cached) {
+    if (cached.ok) el.innerHTML = cached.svg
+    else showTypstError(el, latex, display, cached.error)
+    return
+  }
+  void renderTypstMathToSvg(latex, display).then((result) => {
+    if (result.ok) {
+      el.innerHTML = result.svg
+      el.classList.remove('cm-math-error')
+      el.removeAttribute('title')
+    } else {
+      showTypstError(el, latex, display, result.error)
+    }
+  })
+}
+
+function renderMath(el: HTMLElement, latex: string, display: boolean, renderer: MathRenderer): void {
+  if (renderer === 'typst') renderTypst(el, latex, display)
+  else renderKatex(el, latex, display)
+}
+
 class InlineMathWidget extends WidgetType {
-  constructor(readonly latex: string) {
+  constructor(
+    readonly latex: string,
+    readonly renderer: MathRenderer
+  ) {
     super()
   }
   eq(other: InlineMathWidget): boolean {
-    return other.latex === this.latex
+    return other.latex === this.latex && other.renderer === this.renderer
   }
   toDOM(): HTMLElement {
     const el = document.createElement('span')
     el.className = 'cm-math-inline'
-    renderKatex(el, this.latex, false)
+    renderMath(el, this.latex, false, this.renderer)
     return el
   }
   ignoreEvent(): boolean {
@@ -55,17 +103,26 @@ class InlineMathWidget extends WidgetType {
 }
 
 class BlockMathWidget extends WidgetType {
-  constructor(readonly latex: string) {
+  constructor(
+    readonly latex: string,
+    readonly renderer: MathRenderer
+  ) {
     super()
   }
   eq(other: BlockMathWidget): boolean {
-    return other.latex === this.latex
+    return other.latex === this.latex && other.renderer === this.renderer
   }
   toDOM(): HTMLElement {
     const el = document.createElement('div')
     el.className = 'cm-math-block'
-    renderKatex(el, this.latex, true)
+    renderMath(el, this.latex, true, this.renderer)
     return el
+  }
+  // Let CodeMirror handle clicks (like the inline widget) so clicking a rendered
+  // block places the cursor in it and reveals the raw source for editing —
+  // otherwise the only way in is keyboard navigation.
+  ignoreEvent(): boolean {
+    return false
   }
 }
 
@@ -105,6 +162,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
   const blockLines: MathBlockLineRange[] = []
   const doc = state.doc
   const text = doc.toString()
+  const renderer = state.facet(mathRendererFacet)
 
   // --- Block math `$$…$$` ------------------------------------------------
   BLOCK_MATH_RE.lastIndex = 0
@@ -131,7 +189,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
     pending.push({
       from: openLine.from,
       to: closeLine.to,
-      deco: Decoration.replace({ block: true, widget: new BlockMathWidget(inner) })
+      deco: Decoration.replace({ block: true, widget: new BlockMathWidget(inner, renderer) })
     })
   }
 
@@ -152,7 +210,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
       if (insideBlock(from, to)) continue
       if (isInsideCode(state, from + 1)) continue
       if (selectionTouches(state, from, to)) continue
-      pending.push({ from, to, deco: Decoration.replace({ widget: new InlineMathWidget(inner) }) })
+      pending.push({ from, to, deco: Decoration.replace({ widget: new InlineMathWidget(inner, renderer) }) })
     }
   }
 
@@ -165,9 +223,16 @@ function buildMathRender(state: EditorState): MathRenderValue {
 const mathRenderField = StateField.define<MathRenderValue>({
   create: (state) => buildMathRender(state),
   update(value, tr) {
-    // Rebuild on edits, on cursor moves (to reveal/hide the active formula), and
-    // when the parser advances (isInsideCode reads the syntax tree).
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+    // Rebuild on edits, on cursor moves (to reveal/hide the active formula), when
+    // the parser advances (isInsideCode reads the syntax tree), and when the math
+    // engine is switched (the facet is reconfigured via the live-preview
+    // compartment; see EditorPane).
+    if (
+      tr.docChanged ||
+      tr.selection ||
+      syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
+      tr.startState.facet(mathRendererFacet) !== tr.state.facet(mathRendererFacet)
+    ) {
       return buildMathRender(tr.state)
     }
     return value
@@ -186,4 +251,12 @@ export function mathBlockLineRanges(state: EditorState): readonly MathBlockLineR
   return state.field(mathRenderField, false)?.blockLines ?? []
 }
 
-export const mathRenderExtension: Extension = [mathRenderField]
+/**
+ * Live-preview math rendering for the given engine. The `renderer` rides in on a
+ * facet so switching KaTeX ⇄ Typst reconfigures cleanly (via the live-preview
+ * compartment) without swapping the StateField itself, so `mathBlockLineRanges`
+ * keeps its stable field reference.
+ */
+export function mathRenderExtension(renderer: MathRenderer): Extension {
+  return [mathRendererFacet.of(renderer), mathRenderField]
+}

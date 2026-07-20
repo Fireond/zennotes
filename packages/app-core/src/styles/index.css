@@ -2968,6 +2968,37 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   margin-top: -0.25em;
 }
 
+/* Typst math (the KaTeX alternative; see typst-math-render.ts). Each formula is
+ * an SVG whose glyphs are recolored to currentColor, so it follows the theme for
+ * free. Inline spans sit in the text line; display divs get the same centered,
+ * paper-tinted box as `.katex-display` so the two engines read consistently. */
+.prose-zen .zen-typst-math {
+  display: inline-block;
+}
+.prose-zen .zen-typst-math svg {
+  max-width: 100%;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-display {
+  display: block;
+  text-align: center;
+  margin: 1.35em 0;
+  padding: 0.9em 1.1em;
+  background: color-mix(in srgb, theme("colors.paper.200") 70%, transparent);
+  border: 1px solid
+    color-mix(in srgb, theme("colors.paper.300") 70%, transparent);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-display + .zen-typst-display {
+  margin-top: -0.25em;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-error {
+  font-family: var(--z-font-mono, ui-monospace, monospace);
+  color: rgb(var(--z-red, 255 69 58));
+  opacity: 0.85;
+}
+
 /* Strikethrough (`~~…~~`) around math. `.katex` renders as an inline-block,
  * an atomic inline that a parent <del>/<s> line-through is not painted across
  * (and setting `text-decoration` on `.katex` still won't cross its own nested
@@ -4764,6 +4795,28 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 .cm-wysiwyg .cm-editor .cm-math-error {
   font-family: var(--z-font-mono, ui-monospace, monospace);
   opacity: 0.75;
+}
+/* Typst live-preview widgets fill the same `.cm-math-*` hosts with an SVG whose
+   glyphs are currentColor, so they inherit the editor text color and theme.
+   `pointer-events: none` keeps the SVG's own text-selection layer from
+   swallowing the click, so it reaches CodeMirror and reveals the source. */
+.cm-wysiwyg .cm-editor :is(.cm-math-inline, .cm-math-block) svg {
+  max-width: 100%;
+  pointer-events: none;
+}
+/* A Typst display block renders as a bare <svg> directly inside `.cm-math-block`
+   (KaTeX's box comes from its inner `.katex-display`). Give it the same paper-tint
+   box so both engines read identically. `:has(> svg)` matches only the Typst case
+   — KaTeX emits spans, not a direct svg child. Padding, not margin: CodeMirror
+   measures block widgets with getBoundingClientRect, which excludes margins. */
+.cm-wysiwyg .cm-editor .cm-math-block:has(> svg) {
+  padding: 0.9em 1.1em;
+  background: color-mix(in srgb, theme("colors.paper.200") 70%, transparent);
+  border: 1px solid
+    color-mix(in srgb, theme("colors.paper.300") 70%, transparent);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* Inline hashtags rendered as clickable pills — Obsidian's `.tag` style:

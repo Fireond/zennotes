@@ -205,6 +205,13 @@ recordBootMark('main.boot.module-loaded')
 const LOCAL_ASSET_SCHEME = 'zen-asset'
 const THEME_ASSET_SCHEME = 'zen-theme'
 const EXCALIDRAW_ASSET_SCHEME = 'zen-excalidraw'
+// Serves the Typst renderer's bundled assets (the compiler + renderer WASM and
+// the New Computer Modern fonts) to the renderer. On the packaged app the window
+// loads over file://, whose opaque origin makes the CSP `connect-src 'self'`
+// reject a plain fetch of these assets, so the Typst renderer requests them
+// through this scheme instead (added to connect-src in the renderer's
+// index.html). Web keeps fetching the same-origin http assets.
+const TYPST_ASSET_SCHEME = 'zen-typst'
 
 const PRIVILEGED_ASSET_PRIVILEGES = {
   standard: true,
@@ -217,7 +224,8 @@ const PRIVILEGED_ASSET_PRIVILEGES = {
 protocol.registerSchemesAsPrivileged([
   { scheme: LOCAL_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
   { scheme: THEME_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
-  { scheme: EXCALIDRAW_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES }
+  { scheme: EXCALIDRAW_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
+  { scheme: TYPST_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES }
 ])
 
 let mainWindow: BrowserWindow | null = null
@@ -3620,6 +3628,32 @@ app.whenReady().then(async () => {
     return new Response(data, {
       headers: {
         'content-type': excalidrawFontMime(abs),
+        'cache-control': 'public, max-age=31536000, immutable'
+      }
+    })
+  })
+
+  protocol.handle(TYPST_ASSET_SCHEME, async (request) => {
+    // zen-typst://asset/<file> -> out/renderer/assets/<file> (the renderer's own
+    // bundled assets, next to its JS chunks). The renderer only ever requests
+    // the hashed Typst wasm and .otf fonts it imported, so this is a fixed,
+    // read-only view of the build output, scoped to those two asset kinds.
+    const rel = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '')
+    const root = path.resolve(__dirname, '../renderer/assets')
+    const abs = path.resolve(root, rel)
+    if (abs !== root && !abs.startsWith(root + path.sep)) {
+      throw new Error(`Invalid Typst asset URL: ${request.url}`)
+    }
+    const contentType = /\.wasm$/i.test(abs)
+      ? 'application/wasm'
+      : /\.otf$/i.test(abs)
+        ? 'font/otf'
+        : null
+    if (!contentType) throw new Error(`Invalid Typst asset URL: ${request.url}`)
+    const data = await fsp.readFile(abs)
+    return new Response(data, {
+      headers: {
+        'content-type': contentType,
         'cache-control': 'public, max-age=31536000, immutable'
       }
     })

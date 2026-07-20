@@ -144,6 +144,11 @@ const SCALAR_FIELDS: Partial<Record<PortablePrefKey, ScalarFieldMap>> = {
     tomlKey: 'completed_task_style',
     comment: 'none | strikethrough | gray | gray-strikethrough — style checked-task text'
   },
+  mathRenderer: {
+    section: 'editor',
+    tomlKey: 'math_renderer',
+    comment: 'katex | typst: typesetter for $…$ / $$…$$ math'
+  },
   lineNumberMode: {
     section: 'editor',
     tomlKey: 'line_number_mode',

@@ -32,7 +32,7 @@ describe('keyboard navigation into rendered block math', () => {
         extensions: [
           ...(withVim ? [vim()] : []),
           markdown({ base: markdownLanguage }),
-          mathRenderExtension,
+          mathRenderExtension('katex'),
           keymap.of([...mathBlockArrowKeymap])
         ]
       })
@@ -68,7 +68,7 @@ describe('keyboard navigation into rendered block math', () => {
       parent: document.body,
       state: EditorState.create({
         doc: 'I paid $5 and got $10 back.',
-        extensions: [markdown({ base: markdownLanguage }), mathRenderExtension]
+        extensions: [markdown({ base: markdownLanguage }), mathRenderExtension('katex')]
       })
     })
     views.push(plain)

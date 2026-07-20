@@ -15,7 +15,7 @@ function mount(doc: string, selection?: EditorSelection | { anchor: number }): E
     state: EditorState.create({
       doc,
       selection: selection ?? { anchor: 0 },
-      extensions: [markdown({ base: markdownLanguage }), mathRenderExtension]
+      extensions: [markdown({ base: markdownLanguage }), mathRenderExtension('katex')]
     })
   })
   forceParsing(view, doc.length, 5000)

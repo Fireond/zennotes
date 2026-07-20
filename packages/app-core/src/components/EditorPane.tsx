@@ -127,6 +127,7 @@ import { ArchiveView } from './ArchiveView'
 import { TrashView } from './TrashView'
 import { AssetsView } from './AssetsView'
 import { QuickNotesView } from './QuickNotesView'
+import type { MathRenderer } from '@shared/app-config'
 import { isTasksTabPath } from '@shared/tasks'
 import { isDatabaseTabPath, databaseTitleFromTab, databaseTabPath, isDatabaseCsvPath } from '@shared/databases'
 import { isTagsTabPath } from '@shared/tags'
@@ -346,7 +347,7 @@ function markdownSyntaxHighlightExtensions(): Extension[] {
  * frontmatter-properties panel is intentionally excluded — it depends on
  * the PR's breaking database restructure.
  */
-function wysiwygExtensions(renderTables: boolean): Extension[] {
+function wysiwygExtensions(renderTables: boolean, mathRenderer: MathRenderer): Extension[] {
   return [
     livePreviewPlugin,
     codeBlockFlairPlugin,
@@ -357,8 +358,14 @@ function wysiwygExtensions(renderTables: boolean): Extension[] {
     ...hashtagExtension,
     ...highlightExtension,
     ...wikilinkRenderExtension,
-    mathRenderExtension
+    mathRenderExtension(mathRenderer)
   ]
+}
+
+/** Current live-preview extension set, pulling both gating prefs from the store. */
+function currentWysiwygExtensions(): Extension[] {
+  const s = useStore.getState()
+  return wysiwygExtensions(s.renderTablesInLivePreview, s.mathRenderer)
 }
 
 const paperHighlight = HighlightStyle.define([
@@ -762,6 +769,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
   const vimYankToClipboard = useStore((s) => s.vimYankToClipboard)
   const livePreview = useStore((s) => s.livePreview)
   const renderTablesInLivePreview = useStore((s) => s.renderTablesInLivePreview)
+  const mathRenderer = useStore((s) => s.mathRenderer)
   const editorFontSize = useStore((s) => s.editorFontSize)
   const editorLineHeight = useStore((s) => s.editorLineHeight)
   const editorScrollOff = useStore((s) => s.editorScrollOff)
@@ -1597,7 +1605,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           ),
           livePreviewCompartment.of(
             s0.livePreview && !deferInitialRichMarkdown
-              ? wysiwygExtensions(s0.renderTablesInLivePreview)
+              ? wysiwygExtensions(s0.renderTablesInLivePreview, s0.mathRenderer)
               : []
           ),
           lineNumbersCompartment.of(lineNumberExtension(s0.lineNumberMode)),
@@ -1767,7 +1775,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
             markdownSyntaxCompartment.reconfigure(markdownSyntaxHighlightExtensions())
           ]
           if (useStore.getState().livePreview) {
-            restoreEffects.push(livePreviewCompartment.reconfigure(wysiwygExtensions(useStore.getState().renderTablesInLivePreview)))
+            restoreEffects.push(livePreviewCompartment.reconfigure(currentWysiwygExtensions()))
           }
           view.dispatch({ effects: restoreEffects })
         }, LARGE_DOC_LIVE_PREVIEW_DEFER_MS)
@@ -1860,7 +1868,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
         markdownSyntaxCompartment.reconfigure(markdownSyntaxHighlightExtensions())
       )
       if (livePreviewEnabled && livePreviewCompartment) {
-        effects.push(livePreviewCompartment.reconfigure(wysiwygExtensions(useStore.getState().renderTablesInLivePreview)))
+        effects.push(livePreviewCompartment.reconfigure(currentWysiwygExtensions()))
       }
     }
     const dispatchStartedAt = performance.now()
@@ -1924,7 +1932,7 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
           markdownSyntaxCompartment.reconfigure(markdownSyntaxHighlightExtensions())
         ]
         if (useStore.getState().livePreview && livePreviewCompartment) {
-          restoreEffects.push(livePreviewCompartment.reconfigure(wysiwygExtensions(useStore.getState().renderTablesInLivePreview)))
+          restoreEffects.push(livePreviewCompartment.reconfigure(currentWysiwygExtensions()))
         }
         view.dispatch({
           effects: restoreEffects
@@ -1979,13 +1987,13 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
             markdownSyntaxCompartment.reconfigure(markdownSyntaxHighlightExtensions())
           )
         }
-        effects.push(comp.reconfigure(wysiwygExtensions(useStore.getState().renderTablesInLivePreview)))
+        effects.push(comp.reconfigure(currentWysiwygExtensions()))
         view.dispatch({ effects })
       }
       return
     }
-    view.dispatch({ effects: comp.reconfigure(livePreview ? wysiwygExtensions(useStore.getState().renderTablesInLivePreview) : []) })
-  }, [livePreview, renderTablesInLivePreview])
+    view.dispatch({ effects: comp.reconfigure(livePreview ? currentWysiwygExtensions() : []) })
+  }, [livePreview, renderTablesInLivePreview, mathRenderer])
   useEffect(() => {
     const view = viewRef.current
     const comp = lineNumbersCompartmentRef.current

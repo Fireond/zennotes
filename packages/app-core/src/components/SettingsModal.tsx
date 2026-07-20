@@ -439,6 +439,8 @@ export function SettingsModal(): JSX.Element {
   );
   const completedTaskStyle = useStore((s) => s.completedTaskStyle);
   const setCompletedTaskStyle = useStore((s) => s.setCompletedTaskStyle);
+  const mathRenderer = useStore((s) => s.mathRenderer);
+  const setMathRenderer = useStore((s) => s.setMathRenderer);
   const keepViewModeAcrossNotes = useStore((s) => s.keepViewModeAcrossNotes);
   const setKeepViewModeAcrossNotes = useStore(
     (s) => s.setKeepViewModeAcrossNotes,
@@ -1765,6 +1767,22 @@ export function SettingsModal(): JSX.Element {
           ],
         },
         {
+          id: "math-renderer",
+          title: "Math renderer",
+          description:
+            "Choose KaTeX or Typst to typeset $…$ and $$…$$ math in the editor and reading view.",
+          keywords: [
+            "math",
+            "katex",
+            "typst",
+            "latex",
+            "equation",
+            "formula",
+            "renderer",
+            "typesetter",
+          ],
+        },
+        {
           id: "markdown-overrides",
           title: "Markdown snippets",
           description:
@@ -2079,6 +2097,17 @@ export function SettingsModal(): JSX.Element {
                     { value: "gray-strikethrough", label: "Both" },
                   ]}
                   onChange={(next) => setCompletedTaskStyle(next)}
+                />
+                <SegmentedRow
+                  label="Math renderer"
+                  description="Which typesetter draws $…$ and $$…$$ math, in both the editor and the reading view. KaTeX reads the math as LaTeX; Typst reads it as Typst markup, so switching reinterprets existing formulas, and each note's math is written for whichever engine you pick."
+                  value={mathRenderer}
+                  settingId="math-renderer"
+                  options={[
+                    { value: "katex", label: "KaTeX" },
+                    { value: "typst", label: "Typst" },
+                  ]}
+                  onChange={(next) => setMathRenderer(next)}
                 />
                 <ToggleRow
                   label="Keep view mode when switching notes"
