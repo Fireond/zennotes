@@ -30,6 +30,7 @@ import { externalLinkUrl, extractLinkAtCursor, resolveInternalNoteHref } from '.
 import {
   buildMoveNotePrompt,
   parseMoveNoteTarget,
+  parseTemplateDestination,
   validateMoveNoteTarget
 } from '../lib/move-note'
 import { promptApp } from '../lib/prompt-requests'
@@ -413,6 +414,25 @@ function registerVimCommands(): void {
   Vim.defineEx('tasks', 'tasks', () => {
     void useStore.getState().openTasksView()
   })
+
+  // Quick-add a whole-note task file. `:newtask` (or `:task`) prompts for a
+  // title and creates it at the configured tasks location; `:newtask <folder>`
+  // targets a specific folder so per-project tasks stay organized (e.g.
+  // `:newtask Projects/Website`). Short name `newt` is a prefix of `newtask`.
+  const runNewTaskEx = (
+    _cm: unknown,
+    params: { argString?: string } | undefined
+  ): void => {
+    const arg = (params?.argString ?? '').trim()
+    if (!arg) {
+      void useStore.getState().newTaskFile()
+      return
+    }
+    const dest = parseTemplateDestination(arg)
+    void useStore.getState().newTaskFile({ folder: dest.folder, subpath: dest.subpath })
+  }
+  Vim.defineEx('newtask', 'newt', runNewTaskEx)
+  Vim.defineEx('task', 'task', runNewTaskEx)
 
   // `:template` / `:tmpl` opens the template picker. `:template <name>` skips
   // the picker and creates directly from the best name/id match. CM-Vim

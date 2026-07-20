@@ -111,6 +111,20 @@ export function buildCommands(options?: { includeUnavailable?: boolean }): Comma
       run: () => void getState().newDatabase()
     },
     {
+      id: 'task.new',
+      title: 'New Task',
+      category: 'Note',
+      keywords: 'task todo checkbox tasknotes taskforge new add create file due priority',
+      run: () => void getState().newTaskFile()
+    },
+    {
+      id: 'task.new.folder',
+      title: 'New Task in Folder…',
+      category: 'Note',
+      keywords: 'task todo new create folder project location directory organize where place',
+      run: () => void getState().newTaskFileInChosenFolder()
+    },
+    {
       id: 'note.daily.today',
       title: "Open Today's Daily Note",
       category: 'Note',

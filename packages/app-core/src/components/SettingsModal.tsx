@@ -3042,8 +3042,8 @@ export function SettingsModal(): JSX.Element {
                 />
               </Section>
               <Section
-                title="New Drawings & Databases"
-                description="Where new Excalidraw drawings and databases are created, so they don't clutter the root of your vault."
+                title="New Drawings, Databases & Tasks"
+                description="Where new Excalidraw drawings, databases, and task files are created, so they don't clutter the root of your vault."
               >
                 <SegmentedRow
                   label="Default drawings location"
@@ -3107,6 +3107,39 @@ export function SettingsModal(): JSX.Element {
                       void persistVaultSettings({
                         ...vaultSettings,
                         databasesLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+                <SegmentedRow
+                  label="Default tasks location"
+                  description="Where new task files (from `+ New task`, the `a` key, `:newtask`, or the command palette) are created. `New Task in Folder…` and `:newtask <folder>` still override this per task."
+                  value={vaultSettings.tasksLocation?.mode ?? "primary"}
+                  settingId="tasks-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      tasksLocation: { ...vaultSettings.tasksLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.tasksLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Tasks folder"
+                    description="Vault-relative subfolder for new task files, e.g. `Tasks` or `Projects/Inbox`."
+                    value={vaultSettings.tasksLocation?.folder ?? ""}
+                    placeholder="Tasks"
+                    settingId="tasks-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        tasksLocation: { mode: "folder", folder: next ?? "" },
                       })
                     }
                   />

@@ -2522,10 +2522,15 @@ interface Store {
     options?: { focusTitle?: boolean; title?: string }
   ) => Promise<void>
   createDrawingAndOpen: (folder: NoteFolder, subpath?: string) => Promise<void>
-  /** Quick-add a whole-note task file (`#task`-tagged, TaskNotes-style) at the
-   *  configured tasks location. Prompts for a title; the new task then appears
-   *  in the Tasks view. Resolves to the created path, or null if cancelled. */
-  newTaskFile: () => Promise<string | null>
+  /** Quick-add a whole-note task file (`#task`-tagged, TaskNotes-style). Prompts
+   *  for a title and creates it at `opts` (an explicit folder/subpath) or, when
+   *  omitted, the configured tasks location. Resolves to the created path, or
+   *  null if cancelled. */
+  newTaskFile: (opts?: { folder: NoteFolder; subpath?: string }) => Promise<string | null>
+  /** Quick-add a task file after first asking which folder to put it in (a
+   *  destination prompt with folder autocomplete), then the title — for keeping
+   *  per-project tasks organized. Resolves to the created path, or null. */
+  newTaskFileInChosenFolder: () => Promise<string | null>
   /**
    * Create a note after asking where to put it: a destination prompt that
    * defaults to `initialPath` (empty = vault root), so the user can press Enter
@@ -4047,7 +4052,7 @@ export const useStore = create<Store>((set, get) => {
     )
     await get().createDatabase(folder, subpath)
   },
-  newTaskFile: async () => {
+  newTaskFile: async (opts) => {
     const title = (
       await promptApp({
         title: 'New task',
@@ -4058,7 +4063,11 @@ export const useStore = create<Store>((set, get) => {
     if (!title) return null
     const s = get()
     const settings = normalizeVaultSettings(s.vaultSettings)
-    const { folder, subpath } = resolveCreateLocation(settings.tasksLocation, s.activeNote, settings)
+    // An explicit destination wins; otherwise fall back to the configured tasks
+    // location (the inbox by default).
+    const { folder, subpath } = opts
+      ? { folder: opts.folder, subpath: opts.subpath ?? '' }
+      : resolveCreateLocation(settings.tasksLocation, s.activeNote, settings)
     try {
       const meta = await window.zen.createNote(folder, title, subpath)
       // Overwrite the default `# title` body with the TaskNotes-style frontmatter
@@ -4073,6 +4082,13 @@ export const useStore = create<Store>((set, get) => {
       console.error('newTaskFile failed', err)
       return null
     }
+  },
+  newTaskFileInChosenFolder: async () => {
+    const state = get()
+    const entered = await promptApp(buildNoteDestinationPrompt('', state.folders))
+    if (entered == null) return null // cancelled
+    const dest = parseTemplateDestination(entered)
+    return get().newTaskFile({ folder: dest.folder, subpath: dest.subpath })
   },
   renameDatabase: async (csvPath, newTitle) => {
     if (typeof window.zen.renameDatabase !== 'function') return
