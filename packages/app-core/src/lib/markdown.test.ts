@@ -4,6 +4,17 @@ import { describe, expect, it } from 'vitest'
 import { renderMarkdown } from './markdown'
 
 describe('renderMarkdown', () => {
+  it('hides leading YAML/TOML frontmatter in preview output', () => {
+    const yaml = renderMarkdown('---\ntitle: Hidden\ntags: [a, b]\n---\n\n# Visible')
+    expect(yaml).toContain('<h1 data-source-line="6">Visible</h1>')
+    expect(yaml).not.toContain('title: Hidden')
+    expect(yaml).not.toContain('<hr')
+
+    const toml = renderMarkdown('+++\ntitle = "Hidden"\n+++\n\nBody')
+    expect(toml).toContain('<p data-source-line="5">Body</p>')
+    expect(toml).not.toContain('title =')
+  })
+
   it('sanitizes raw HTML and javascript URLs', () => {
     const html = renderMarkdown(
       [
