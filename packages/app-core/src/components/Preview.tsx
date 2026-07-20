@@ -26,6 +26,7 @@ import { resolveExcalidrawEmbedPath } from "../lib/excalidraw-preview";
 import { LazyExcalidrawPreview } from "./LazyExcalidrawPreview";
 import { enhancePreviewHeadingFolds } from "../lib/preview-heading-fold";
 import { renderDiagrams } from "../lib/diagram-renderers";
+import { renderEmbeds, renderBookmarks } from "../lib/embed-renderers";
 import { renderTypstMath } from "../lib/typst-math-render";
 import { externalFileLink, openExternalFileLink } from "../lib/external-file-link";
 import { setHoveredLink } from "../lib/hovered-link";
@@ -925,6 +926,8 @@ export const Preview = memo(function Preview({
       // switch needs no re-render.
       await renderTypstMath(root);
       if (cancelled) return;
+      renderEmbeds(root);
+      renderBookmarks(root);
       renderExcalidrawEmbeds(root);
       requestAnimationFrame(() => {
         if (!cancelled && embedsReadyRef.current) onRenderedRef.current?.();

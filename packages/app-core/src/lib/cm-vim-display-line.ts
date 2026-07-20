@@ -1,6 +1,7 @@
 import { CodeMirror, Vim } from '@replit/codemirror-vim'
 import type { EditorView } from '@codemirror/view'
 import { mathBlockLineRanges } from './cm-math-render'
+import { embedBlockLineRanges } from './cm-embed-render'
 
 // Minimal shape of the CodeMirror-Vim adapter + state the display-line motion
 // touches (the package's own types don't surface these helpers).
@@ -77,7 +78,9 @@ export function zenMoveByDisplayLine(
   // reveal-induced height changes compound into multi-line jumps. Move by
   // logical line around them instead (cm-math-render reveals the block the
   // cursor steps into within the same transaction).
-  const mathRanges = cm.cm6 ? mathBlockLineRanges(cm.cm6.state) : []
+  const mathRanges = cm.cm6
+    ? [...mathBlockLineRanges(cm.cm6.state), ...embedBlockLineRanges(cm.cm6.state)]
+    : []
   const logicalTarget = Math.max(
     cm.firstLine(),
     Math.min(cm.lastLine(), forward ? head.line + repeat : head.line - repeat)

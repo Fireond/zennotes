@@ -90,6 +90,8 @@ import { hashtagSource } from '../lib/cm-hashtag-complete'
 import { applyHighlight, HIGHLIGHT_COLORS, highlightExtension } from '../lib/cm-highlight'
 import { wikilinkRenderExtension } from '../lib/cm-wikilink-render'
 import { mathRenderExtension } from '../lib/cm-math-render'
+import { embedRenderExtension } from '../lib/cm-embed-render'
+import { urlPasteMenuExtension } from '../lib/cm-url-paste-menu'
 import { mathBlockArrowKeymap } from '../lib/cm-math-nav'
 import { slashCommandSource, slashCommandRender } from '../lib/cm-slash-commands'
 import { calloutTypeSource } from '../lib/cm-callouts'
@@ -360,7 +362,9 @@ function wysiwygExtensions(renderTables: boolean, mathRenderer: MathRenderer): E
     ...hashtagExtension,
     ...highlightExtension,
     ...wikilinkRenderExtension,
-    mathRenderExtension(mathRenderer)
+    mathRenderExtension(mathRenderer),
+    embedRenderExtension,
+    urlPasteMenuExtension
   ]
 }
 

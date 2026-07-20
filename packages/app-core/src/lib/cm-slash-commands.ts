@@ -43,6 +43,22 @@ const COMMANDS: SlashCmd[] = [
   { label: 'Divider', detail: '---', icon: '—', insert: '---\n' },
   { label: 'Table', detail: '|', icon: '⊞', insert: '| Column 1 | Column 2 |\n| --- | --- |\n| | |' },
   { label: 'Math block', detail: '$$', icon: '∑', insert: '$$\n\n$$', cursorOffset: -3 },
+  {
+    label: 'Embed',
+    detail: 'video / iframe',
+    icon: '▶',
+    insert: '```embed\n\n```',
+    cursorOffset: -4,
+    keywords: 'video youtube vimeo iframe embed url'
+  },
+  {
+    label: 'Bookmark',
+    detail: 'link card',
+    icon: '🔖',
+    insert: '```bookmark\n\n```',
+    cursorOffset: -4,
+    keywords: 'link url card preview bookmark web'
+  },
   { label: 'Callout', detail: '>', icon: '!', insert: '> [!note]\n> ' },
   { label: 'Link', detail: '[]', icon: '🔗', insert: '[]()', cursorOffset: -3 },
   { label: 'Image', detail: '![]', icon: '🖼', insert: '![]()', cursorOffset: -3 },

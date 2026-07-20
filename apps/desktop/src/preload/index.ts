@@ -23,6 +23,7 @@ import type {
   ExternalFileContent,
   FolderEntry,
   ImportedAsset,
+  LinkMetadata,
   LocalVaultEntry,
   MoveExternalFileResult,
   ListNotesPageRequest,
@@ -358,6 +359,8 @@ const api: ZenBridge = {
     ipcRenderer.invoke(IPC.VAULT_REVEAL_FILE_PATH, absPath),
   openExternalFile: (href: string): Promise<{ ok: boolean; error?: string }> =>
     ipcRenderer.invoke(IPC.VAULT_OPEN_EXTERNAL_FILE, href),
+  fetchLinkMetadata: (url: string): Promise<LinkMetadata> =>
+    ipcRenderer.invoke(IPC.VAULT_FETCH_LINK_METADATA, url),
   moveNote: (
     relPath: string,
     targetFolder: NoteFolder,

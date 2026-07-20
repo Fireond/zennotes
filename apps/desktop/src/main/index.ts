@@ -154,6 +154,7 @@ import { VaultWatcher } from './watcher'
 import { WindowVaultRegistry } from './window-vaults'
 import { registerEphemeralRoot, isEphemeralRoot } from './ephemeral-vaults'
 import { renderTikz } from './tikz'
+import { fetchLinkMetadata } from './link-metadata'
 import { RemoteServerClient } from './remote/server-client'
 import {
   getMcpClientStatuses,
@@ -2621,6 +2622,10 @@ function registerIpc(): void {
     }
   })
 
+  handle(IPC.VAULT_FETCH_LINK_METADATA, async (_e, url: string) => {
+    return await fetchLinkMetadata(url)
+  })
+
   handle(
     IPC.VAULT_MOVE_NOTE,
     async (_e, relPath: string, targetFolder: NoteFolder, targetSubpath: string) => {
@@ -3707,6 +3712,28 @@ app.whenReady().then(async () => {
   // async request handler — grant the same set here or they still fail.
   session.defaultSession.setPermissionCheckHandler((_wc, permission) =>
     GRANTED_PERMISSIONS.has(permission as string)
+  )
+
+  // `renderEmbeds` drops YouTube/Vimeo players into iframes. The packaged app
+  // loads over file://, so those requests carry a null Referer/Origin and the
+  // providers reject the embed (YouTube "Error 153"). Give them a valid
+  // same-site referrer so the player loads, matching what a normal web embed
+  // sends. Scoped to the exact embed hosts.
+  const EMBED_REFERERS: Record<string, string> = {
+    'www.youtube-nocookie.com': 'https://zennotes.app/',
+    'player.vimeo.com': 'https://zennotes.app/'
+  }
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube-nocookie.com/*', 'https://player.vimeo.com/*'] },
+    (details, callback) => {
+      try {
+        const referer = EMBED_REFERERS[new URL(details.url).hostname]
+        if (referer) details.requestHeaders['Referer'] = referer
+      } catch {
+        /* leave headers unchanged on a malformed URL */
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    }
   )
 
   // macOS dock icon. `BrowserWindow.icon` has no effect on macOS — the

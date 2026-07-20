@@ -6,6 +6,7 @@ import type {
   ExternalFileContent,
   FolderEntry,
   ImportedAsset,
+  LinkMetadata,
   LocalVaultEntry,
   MoveExternalFileResult,
   ListNotesPageRequest,
@@ -184,6 +185,12 @@ export interface ZenBridge {
    * when the open fails, so callers can surface a message.
    */
   openExternalFile(href: string): Promise<{ ok: boolean; error?: string }>
+  /**
+   * Fetch open-graph metadata for a URL to render a bookmark card. Desktop
+   * fetches and parses the page in the main process; the web build returns a
+   * minimal record. Never throws — `ok: false` on failure.
+   */
+  fetchLinkMetadata(url: string): Promise<LinkMetadata>
   moveNote(relPath: string, targetFolder: NoteFolder, targetSubpath: string): Promise<NoteMeta>
   importFilesToNote(notePath: string, sourcePaths: string[]): Promise<ImportedAsset[]>
   importPastedImage(input: PastedImageInput): Promise<ImportedAsset>

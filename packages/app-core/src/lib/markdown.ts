@@ -31,8 +31,10 @@ const ALLOWED_RENDERED_URI_SCHEME_RE = /^(?:https?|mailto|zen|zen-asset|blob|dat
 const ALLOWED_RENDERED_URI_RE =
   /^(?:(?:https?|mailto|zen|zen-asset|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
 const ALLOWED_RENDERED_DATA_ATTRS = [
+  'data-bookmark-url',
   'data-callout',
   'data-embed-src',
+  'data-embed-url',
   'data-embed-height',
   'data-embed-width',
   'data-excalidraw-embed',
@@ -407,7 +409,13 @@ function rehypeMathDiagrams() {
     'language-functionplot': {
       className: 'zen-function-plot',
       sourceAttr: 'data-function-plot-source'
-    }
+    },
+    // A ```embed fence holds a URL (YouTube, etc.) rendered as an iframe by
+    // `renderEmbeds`. The runtime replaces the placeholder with the player.
+    'language-embed': { className: 'zen-embed', sourceAttr: 'data-embed-url' },
+    // A ```bookmark fence holds a URL rendered as a rich link card (favicon /
+    // title / description / preview) by `renderBookmarks`.
+    'language-bookmark': { className: 'zen-bookmark', sourceAttr: 'data-bookmark-url' }
   }
   return (tree: HastRoot): void => {
     visit(tree, 'element', (node, index, parent) => {
