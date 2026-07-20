@@ -34,6 +34,7 @@ import {
 } from '../lib/move-note'
 import { promptApp } from '../lib/prompt-requests'
 import { offerCreateNoteFromLink } from '../lib/create-note-from-link'
+import { externalFileLink, openExternalFileLink } from '../lib/external-file-link'
 import { StatusBar } from './StatusBar'
 import { EditorPane } from './EditorPane'
 import { focusPaneInDirection, focusPaneOrEdgePanel } from '../lib/pane-nav'
@@ -584,6 +585,12 @@ function registerVimCommands(): void {
     if (openDatabaseFromWikilink(target)) {
       state.setFocusedPanel('editor')
       requestAnimationFrame(() => useStore.getState().editorViewRef?.focus())
+      return
+    }
+
+    // A link to a file outside the vault: open it with the OS default app. (#424)
+    if (externalFileLink(target)) {
+      void openExternalFileLink(target)
       return
     }
 

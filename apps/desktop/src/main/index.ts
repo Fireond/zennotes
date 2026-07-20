@@ -17,6 +17,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fsp } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -2596,6 +2597,28 @@ function registerIpc(): void {
 
   handle(IPC.VAULT_REVEAL_FILE_PATH, async (_e, absPath: string) => {
     shell.showItemInFolder(absPath)
+  })
+
+  // Open a file linked from a note but living outside the vault, with the OS
+  // default app. The renderer confirms with the user first (this could launch
+  // an app), so here we only resolve the href to an absolute path and open it.
+  handle(IPC.VAULT_OPEN_EXTERNAL_FILE, async (_e, href: string) => {
+    try {
+      const raw = String(href ?? '').trim()
+      if (!raw) return { ok: false, error: 'Empty path.' }
+      let abs: string
+      if (/^file:\/\//i.test(raw)) {
+        abs = fileURLToPath(raw)
+      } else if (raw === '~' || raw.startsWith('~/')) {
+        abs = path.join(homedir(), raw.slice(1))
+      } else {
+        abs = path.resolve(raw)
+      }
+      const error = await shell.openPath(abs)
+      return error ? { ok: false, error } : { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   handle(

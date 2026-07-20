@@ -537,6 +537,11 @@ async function revealFilePath(_absPath: string): Promise<void> {
   // No OS file manager on the web.
 }
 
+async function openExternalFile(_href: string): Promise<{ ok: boolean; error?: string }> {
+  // The web app has no access to the machine's filesystem or default apps.
+  return { ok: false, error: 'desktop-only' }
+}
+
 async function revealFolder(_folder: NoteFolder, _subpath: string): Promise<void> {
   // No OS file manager on the web.
 }
@@ -1512,6 +1517,7 @@ export const httpBridge: ZenBridge = {
   duplicateNote,
   exportNotePdf,
   revealNote,
+  openExternalFile,
   revealNoteTarget,
   revealFilePath,
   moveNote,

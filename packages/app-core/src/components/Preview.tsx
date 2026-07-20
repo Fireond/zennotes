@@ -27,6 +27,8 @@ import { LazyExcalidrawPreview } from "./LazyExcalidrawPreview";
 import { enhancePreviewHeadingFolds } from "../lib/preview-heading-fold";
 import { renderDiagrams } from "../lib/diagram-renderers";
 import { renderTypstMath } from "../lib/typst-math-render";
+import { externalFileLink, openExternalFileLink } from "../lib/external-file-link";
+import { setHoveredLink } from "../lib/hovered-link";
 import { attachInlineDiagramPanZoom } from "../lib/inline-diagram-pan-zoom";
 import {
   CODE_COPY_BUTTON_SELECTOR,
@@ -703,6 +705,13 @@ export const Preview = memo(function Preview({
         }
         return;
       }
+      // A link to a file outside the vault (`~/…`, `file://…`, an absolute path):
+      // open it with the OS default app instead of silently doing nothing. (#424)
+      if (externalFileLink(href)) {
+        e.preventDefault();
+        void openExternalFileLink(href);
+        return;
+      }
       e.preventDefault();
     };
     const onMouseOver = (e: MouseEvent): void => {
@@ -718,6 +727,16 @@ export const Preview = memo(function Preview({
     };
     const onMouseMove = (e: MouseEvent): void => {
       const target = e.target as HTMLElement;
+      // Status-bar link preview (browser-style): show the target of whatever
+      // link is under the pointer, wikilink or plain markdown link.
+      const anyLink = target.closest("a") as HTMLAnchorElement | null;
+      setHoveredLink(
+        anyLink
+          ? anyLink.dataset.wikilink ||
+              anyLink.dataset.resolvedPath ||
+              anyLink.getAttribute("href")
+          : null,
+      );
       const anchor = target.closest("a.wikilink") as HTMLAnchorElement | null;
       if (!anchor) {
         // Pointer moved off the link. Don't dismiss immediately — the
@@ -772,10 +791,13 @@ export const Preview = memo(function Preview({
       setAssetMenu({ x: e.clientX, y: e.clientY, url, vaultRel, href });
     };
 
+    const onMouseLeave = (): void => setHoveredLink(null);
+
     root.addEventListener("click", onClick);
     root.addEventListener("mouseover", onMouseOver);
     root.addEventListener("mousemove", onMouseMove);
     root.addEventListener("mouseout", onMouseOut);
+    root.addEventListener("mouseleave", onMouseLeave);
     root.addEventListener("change", onChange);
     root.addEventListener("contextmenu", onContextMenu);
 
@@ -784,8 +806,10 @@ export const Preview = memo(function Preview({
       root.removeEventListener("mouseover", onMouseOver);
       root.removeEventListener("mousemove", onMouseMove);
       root.removeEventListener("mouseout", onMouseOut);
+      root.removeEventListener("mouseleave", onMouseLeave);
       root.removeEventListener("change", onChange);
       root.removeEventListener("contextmenu", onContextMenu);
+      setHoveredLink(null);
     };
   }, []);
 

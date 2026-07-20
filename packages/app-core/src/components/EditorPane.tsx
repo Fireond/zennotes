@@ -58,6 +58,8 @@ import { vimAwareDefaultKeymap, vimAwareMarkdownKeymap } from '../lib/cm-vim-def
 import { toCodeMirrorKey, vimHalfPageKeymap } from '../lib/vim-half-page-keymap'
 import { scrollOff } from '../lib/cm-scrolloff'
 import { offerCreateNoteFromLink } from '../lib/create-note-from-link'
+import { externalFileLink, openExternalFileLink } from '../lib/external-file-link'
+import { setHoveredLink } from '../lib/hovered-link'
 import {
   setYankToClipboardEnabled,
   setPasteFromClipboardEnabled,
@@ -702,6 +704,12 @@ function followEditorLink(target: string): boolean {
   }
   if (openDatabaseFromWikilink(target)) {
     focusSoon()
+    return true
+  }
+  // A link to a file outside the vault (`~/…`, `file://…`, an absolute path):
+  // open it with the OS default app instead of treating it as a note. (#424)
+  if (externalFileLink(target)) {
+    void openExternalFileLink(target)
     return true
   }
   // Dead link — don't leave it a silent dead end. Offer to create the note (with
@@ -1680,6 +1688,23 @@ export function EditorPane({ pane }: { pane: PaneLeaf }): JSX.Element {
               setCommentDraft(null)
               setSelectionCommentAction(null)
               return true
+            },
+            // Show the link under the pointer in the status bar (browser-style).
+            // Scoped to the pointer's line so this stays cheap on every move,
+            // even in a large note (no full-document toString).
+            mousemove: (event, view) => {
+              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+              if (pos == null) {
+                setHoveredLink(null)
+                return false
+              }
+              const line = view.state.doc.lineAt(pos)
+              setHoveredLink(extractLinkAtCursor(line.text, pos - line.from))
+              return false
+            },
+            mouseleave: () => {
+              setHoveredLink(null)
+              return false
             },
             click: (event) => {
               const target = event.target as HTMLElement | null
