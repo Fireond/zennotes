@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isTagsViewActive, useStore } from '../store'
 import type { NoteMeta } from '@shared/ipc'
-import { extractTags, matchesSelectedTags } from '../lib/tags'
+import { buildTagTree, extractTags, flattenTagTree, matchesSelectedTags } from '../lib/tags'
 import { TagIcon, CloseIcon, DocumentIcon } from './icons'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu'
 import { advanceSequence, getKeymapBinding, matchesSequenceToken } from '../lib/keymaps'
@@ -37,6 +37,9 @@ export function TagView(): JSX.Element {
   const setTagMatchMode = useStore((s) => s.setTagMatchMode)
   const toggleTagSelection = useStore((s) => s.toggleTagSelection)
   const setSelectedTags = useStore((s) => s.setSelectedTags)
+  const nestedTags = useStore((s) => s.nestedTags)
+  const collapsedTagNodes = useStore((s) => s.collapsedTagNodes)
+  const toggleCollapseTagNode = useStore((s) => s.toggleCollapseTagNode)
   const closeTagView = useStore((s) => s.closeTagView)
   const selectNote = useStore((s) => s.selectNote)
   const keymapOverrides = useStore((s) => s.keymapOverrides)
@@ -72,6 +75,14 @@ export function TagView(): JSX.Element {
     }
     return [...counter.entries()].sort((a, b) => a[0].localeCompare(b[0]))
   }, [notes, activeNote])
+
+  // Nested-tag tree (#439). Shares the collapsed-node set with the sidebar so
+  // expand/collapse stays in sync across both surfaces.
+  const collapsedTagSet = useMemo(() => new Set(collapsedTagNodes), [collapsedTagNodes])
+  const tagTreeRows = useMemo(
+    () => (nestedTags ? flattenTagTree(buildTagTree(allTags), collapsedTagSet) : []),
+    [nestedTags, allTags, collapsedTagSet]
+  )
 
   // Notes matching the selected tags. Default `all` = intersection (AND), so
   // adding a tag narrows the result set (matches the "narrowing" wording and
@@ -446,26 +457,104 @@ export function TagView(): JSX.Element {
               ))}
             </div>
           )}
-          {allTags.length > selectedTags.length && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="w-16 shrink-0 text-2xs font-semibold uppercase tracking-wider text-current/40">
-                {selectedTags.length > 0 ? 'Add' : 'Tags'}
-              </span>
-              {allTags
-                .filter(([t]) => !selectedTags.includes(t))
-                .map(([t, count]) => (
-                  <button
-                    key={`pick-${t}`}
-                    type="button"
-                    onClick={() => toggleTagSelection(t)}
-                    className="rounded-full bg-current/5 px-2 py-0.5 text-xs text-current/70 hover:bg-current/15 hover:text-current/90"
-                  >
-                    #{t}
-                    <span className="ml-1 text-current/40">{count}</span>
-                  </button>
-                ))}
-            </div>
-          )}
+          {nestedTags
+            ? allTags.length > 0 && (
+                // #439: hierarchical tree of every tag. A leaf (or real tag)
+                // toggles the selection; a pure grouping node expands/collapses.
+                <div className="flex items-start gap-1.5">
+                  <span className="w-16 shrink-0 pt-1 text-2xs font-semibold uppercase tracking-wider text-current/40">
+                    Tags
+                  </span>
+                  <div className="flex min-w-0 flex-1 flex-col gap-px">
+                    {tagTreeRows.map((node) => {
+                      const hasChildren = node.children.length > 0
+                      const collapsed = collapsedTagSet.has(node.path)
+                      const active = selectedTags.includes(node.path)
+                      return (
+                        <div
+                          key={node.path}
+                          style={{ paddingLeft: `${node.depth * 14}px` }}
+                          className={[
+                            'flex items-center gap-0.5 rounded-md pr-1',
+                            active ? 'bg-accent/15' : 'hover:bg-current/5'
+                          ].join(' ')}
+                        >
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              title={collapsed ? 'Expand' : 'Collapse'}
+                              aria-label={collapsed ? 'Expand' : 'Collapse'}
+                              onClick={() => toggleCollapseTagNode(node.path)}
+                              className="flex h-6 w-4 shrink-0 items-center justify-center text-current/50 hover:text-current/90"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="10"
+                                height="10"
+                                aria-hidden="true"
+                                className={collapsed ? '' : 'rotate-90'}
+                              >
+                                <path
+                                  d="M9 6l6 6-6 6"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="h-6 w-4 shrink-0" />
+                          )}
+                          <button
+                            type="button"
+                            title={node.isTag ? `#${node.path}` : node.path}
+                            onClick={() =>
+                              node.isTag
+                                ? toggleTagSelection(node.path)
+                                : toggleCollapseTagNode(node.path)
+                            }
+                            className={[
+                              'flex min-w-0 flex-1 items-center py-1 text-left text-xs',
+                              active
+                                ? 'font-medium text-accent'
+                                : node.isTag
+                                  ? 'text-current/80'
+                                  : 'text-current/50'
+                            ].join(' ')}
+                          >
+                            <span className="truncate">{node.name}</span>
+                            <span className="ml-auto shrink-0 pl-2 text-current/40">
+                              {node.isTag ? node.count : node.subtreeCount}
+                            </span>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            : allTags.length > selectedTags.length && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="w-16 shrink-0 text-2xs font-semibold uppercase tracking-wider text-current/40">
+                    {selectedTags.length > 0 ? 'Add' : 'Tags'}
+                  </span>
+                  {allTags
+                    .filter(([t]) => !selectedTags.includes(t))
+                    .map(([t, count]) => (
+                      <button
+                        key={`pick-${t}`}
+                        type="button"
+                        onClick={() => toggleTagSelection(t)}
+                        className="rounded-full bg-current/5 px-2 py-0.5 text-xs text-current/70 hover:bg-current/15 hover:text-current/90"
+                      >
+                        #{t}
+                        <span className="ml-1 text-current/40">{count}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
         </div>
       )}
 

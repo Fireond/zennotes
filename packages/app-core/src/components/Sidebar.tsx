@@ -23,7 +23,7 @@ import {
 import { Button } from "./ui/Button";
 import { confirmMoveToTrash } from "../lib/confirm-trash";
 import { buildMoveNotePrompt, parseMoveNoteTarget } from "../lib/move-note";
-import { extractTags } from "../lib/tags";
+import { buildTagTree, extractTags, flattenTagTree } from "../lib/tags";
 import type { AssetMeta, FolderColorId, FolderEntry, FolderIconId, NoteFolder, NoteMeta } from "@shared/ipc";
 import type { NoteSortOrder } from "../store";
 import { isArchiveTabPath } from "@shared/archive";
@@ -447,6 +447,9 @@ export function Sidebar(): JSX.Element {
   const deleteTag = useStore((s) => s.deleteTag);
   const tagsCollapsed = useStore((s) => s.tagsCollapsed);
   const setTagsCollapsed = useStore((s) => s.setTagsCollapsed);
+  const nestedTags = useStore((s) => s.nestedTags);
+  const collapsedTagNodes = useStore((s) => s.collapsedTagNodes);
+  const toggleCollapseTagNode = useStore((s) => s.toggleCollapseTagNode);
   const showSidebarChevrons = useStore((s) => s.showSidebarChevrons);
   const createFolderAction = useStore((s) => s.createFolder);
   const renameFolderAction = useStore((s) => s.renameFolder);
@@ -1494,6 +1497,18 @@ export function Sidebar(): JSX.Element {
     });
     return next;
   }, [activeBodyTagSnapshot, notes]);
+
+  // Nested-tag tree (#439): group the flat `[tag, count]` list on `/` and flatten
+  // back to the rows visible given the collapsed set. Falls back to nothing when
+  // the flat-list preference is on; the render below picks which to show.
+  const collapsedTagSet = useMemo(
+    () => new Set(collapsedTagNodes),
+    [collapsedTagNodes],
+  );
+  const visibleTagRows = useMemo(
+    () => (nestedTags ? flattenTagTree(buildTagTree(tags), collapsedTagSet) : []),
+    [nestedTags, tags, collapsedTagSet],
+  );
 
   const bulkSelectionMenuItems = useMemo<ContextMenuItem[] | null>(() => {
     if (selectedSidebarCount <= 1) return null;
@@ -3264,58 +3279,173 @@ export function Sidebar(): JSX.Element {
                   {tags.length}
                 </span>
               </button>
-              {!tagsCollapsed && (
-                <div className="flex flex-wrap gap-1.5 px-1">
-                  {tags.map(([tag, count]) => {
-                    // Tag chips feed into a single vault-wide Tags tab. If the
-                    // tab is already open, clicking a chip toggles that tag in
-                    // the selection (narrower / wider result set). Otherwise
-                    // opening one starts the selection with just this tag.
-                    const active = tagsViewActive && selectedTags.includes(tag);
-                    const tagIdx = idxCounter.current.value++;
-                    const isVimHighlight = vimCursor === tagIdx;
-                    return (
-                      <button
-                        key={tag}
-                        onClick={() => {
-                          void openTagView(tag);
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          setTagMenu({ x: e.clientX, y: e.clientY, tag });
-                        }}
-                        className={[
-                          "rounded-full px-2.5 py-1 text-xs transition-colors",
-                          active
-                            ? isVimHighlight
-                              ? "vim-cursor-on-active bg-paper-300/70 text-ink-900 font-medium"
-                              : isSidebarFocused
-                                ? "text-accent"
-                                : "bg-paper-300/70 text-ink-900 font-medium"
-                            : isVimHighlight
-                              ? "vim-cursor"
-                              : "bg-paper-200 text-ink-800 hover:bg-paper-300",
-                        ].join(" ")}
-                        data-sidebar-idx={tagIdx}
-                        data-sidebar-type="tag"
-                        data-sidebar-tag={tag}
-                      >
-                        #{tag}
-                        <span
-                          className={[
-                            "ml-1 text-2xs",
-                            active && !isSidebarFocused
-                              ? "text-ink-700"
-                              : "text-ink-500",
-                          ].join(" ")}
+              {!tagsCollapsed &&
+                (nestedTags ? (
+                  // #439: hierarchical `/`-separated tags as a collapsible tree.
+                  // A leaf (or a real tag) selects on click; a pure grouping node
+                  // (no note carries it exactly) toggles instead. The disclosure
+                  // triangle always expands/collapses.
+                  <div className="flex flex-col gap-1.5 px-1 pt-0.5">
+                    {visibleTagRows.map((node) => {
+                      const hasChildren = node.children.length > 0;
+                      const collapsed = collapsedTagSet.has(node.path);
+                      const active =
+                        tagsViewActive && selectedTags.includes(node.path);
+                      const tagIdx = idxCounter.current.value++;
+                      const isVimHighlight = vimCursor === tagIdx;
+                      return (
+                        <div
+                          key={node.path}
+                          data-sidebar-idx={tagIdx}
+                          data-sidebar-type="tag"
+                          data-sidebar-tag={node.path}
+                          data-sidebar-tag-expandable={
+                            hasChildren ? "1" : undefined
+                          }
+                          data-sidebar-tag-real={node.isTag ? "1" : undefined}
+                          style={{ paddingLeft: `${node.depth * 14}px` }}
+                          className="flex items-center gap-1"
                         >
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                          {hasChildren ? (
+                            <button
+                              type="button"
+                              title={collapsed ? "Expand" : "Collapse"}
+                              aria-label={collapsed ? "Expand" : "Collapse"}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleCollapseTagNode(node.path);
+                              }}
+                              className="flex h-6 w-4 shrink-0 items-center justify-center text-ink-500 outline-none transition-colors hover:text-ink-800 focus:outline-none focus-visible:outline-none"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                width="9"
+                                height="9"
+                                aria-hidden="true"
+                                className={collapsed ? "" : "rotate-90"}
+                              >
+                                <path
+                                  d="M9 6l6 6-6 6"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </button>
+                          ) : (
+                            <span className="h-6 w-4 shrink-0" />
+                          )}
+                          {/* A rounded chip keeps each tag reading as a tag (not a
+                              file row); real tags are filled, grouping nodes are a
+                              fainter chip. (#439) */}
+                          <button
+                            type="button"
+                            title={node.isTag ? `#${node.path}` : node.path}
+                            onClick={() => {
+                              if (node.isTag) void openTagView(node.path);
+                              else toggleCollapseTagNode(node.path);
+                            }}
+                            onContextMenu={
+                              node.isTag
+                                ? (e) => {
+                                    e.preventDefault();
+                                    setTagMenu({
+                                      x: e.clientX,
+                                      y: e.clientY,
+                                      tag: node.path,
+                                    });
+                                  }
+                                : undefined
+                            }
+                            className={[
+                              "inline-flex min-w-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs outline-none transition-colors focus:outline-none focus-visible:outline-none",
+                              active
+                                ? isVimHighlight
+                                  ? "vim-cursor-on-active bg-paper-300/70 text-ink-900 font-medium"
+                                  : isSidebarFocused
+                                    ? "bg-accent/15 text-accent font-medium"
+                                    : "bg-paper-300/70 text-ink-900 font-medium"
+                                : isVimHighlight
+                                  ? "vim-cursor"
+                                  : node.isTag
+                                    ? "bg-paper-200 text-ink-800 hover:bg-paper-300"
+                                    : "bg-paper-200/40 text-ink-500 hover:bg-paper-200/80",
+                            ].join(" ")}
+                          >
+                            <span className="truncate">
+                              {node.isTag ? "#" : ""}
+                              {node.name}
+                            </span>
+                            <span
+                              className={[
+                                "text-2xs",
+                                active && !isSidebarFocused
+                                  ? "text-ink-700"
+                                  : "text-ink-500",
+                              ].join(" ")}
+                            >
+                              {node.isTag ? node.count : node.subtreeCount}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 px-1">
+                    {tags.map(([tag, count]) => {
+                      // Tag chips feed into a single vault-wide Tags tab. If the
+                      // tab is already open, clicking a chip toggles that tag in
+                      // the selection (narrower / wider result set). Otherwise
+                      // opening one starts the selection with just this tag.
+                      const active =
+                        tagsViewActive && selectedTags.includes(tag);
+                      const tagIdx = idxCounter.current.value++;
+                      const isVimHighlight = vimCursor === tagIdx;
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => {
+                            void openTagView(tag);
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setTagMenu({ x: e.clientX, y: e.clientY, tag });
+                          }}
+                          className={[
+                            "rounded-full px-2.5 py-1 text-xs transition-colors",
+                            active
+                              ? isVimHighlight
+                                ? "vim-cursor-on-active bg-paper-300/70 text-ink-900 font-medium"
+                                : isSidebarFocused
+                                  ? "text-accent"
+                                  : "bg-paper-300/70 text-ink-900 font-medium"
+                              : isVimHighlight
+                                ? "vim-cursor"
+                                : "bg-paper-200 text-ink-800 hover:bg-paper-300",
+                          ].join(" ")}
+                          data-sidebar-idx={tagIdx}
+                          data-sidebar-type="tag"
+                          data-sidebar-tag={tag}
+                        >
+                          #{tag}
+                          <span
+                            className={[
+                              "ml-1 text-2xs",
+                              active && !isSidebarFocused
+                                ? "text-ink-700"
+                                : "text-ink-500",
+                            ].join(" ")}
+                          >
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
             </div>
             )}
 

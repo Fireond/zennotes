@@ -2069,6 +2069,21 @@ export function VimNav(): JSX.Element | null {
     return true
   }
 
+  // Toggle a nested-tag tree node, then keep the roving cursor on it once the
+  // tree re-renders (the row's index shifts as siblings appear/disappear). (#439)
+  function toggleTagNodeKeepingCursor(
+    tag: string,
+    state: ReturnType<typeof useStore.getState>
+  ): void {
+    state.toggleCollapseTagNode(tag)
+    requestAnimationFrame(() => {
+      const fresh = document.querySelector<HTMLElement>(
+        `[data-sidebar-type="tag"][data-sidebar-tag="${escapeForAttr(tag)}"]`
+      )
+      if (fresh) scrollToIndexedElement(fresh, 'sidebarIdx', state.setSidebarCursorIndex)
+    })
+  }
+
   function activateSidebarItem(el: HTMLElement | undefined, state: ReturnType<typeof useStore.getState>): void {
     if (!el) return
     // #301: Daily/Weekly date groups aren't real folders — `l`/Enter/Right
@@ -2101,7 +2116,19 @@ export function VimNav(): JSX.Element | null {
       }
     } else if (itemType === 'tag') {
       const tag = el.dataset.sidebarTag
-      if (tag) void state.openTagView(tag)
+      if (!tag) return
+      const expandable = el.dataset.sidebarTagExpandable === '1'
+      const real = el.dataset.sidebarTagReal === '1'
+      // A real tag selects (and reveals its subtree, if any). A pure grouping
+      // node has nothing to select, so activating it just expands/collapses. (#439)
+      if (real) {
+        if (expandable && state.collapsedTagNodes.includes(tag)) {
+          state.toggleCollapseTagNode(tag)
+        }
+        void state.openTagView(tag)
+      } else if (expandable) {
+        toggleTagNodeKeepingCursor(tag, state)
+      }
     } else if (itemType === 'vault') {
       openContextMenuForIndexedElement(el)
     } else if (itemType === 'tasks') {
@@ -2182,6 +2209,26 @@ export function VimNav(): JSX.Element | null {
       return
     }
 
+    // Nested-tag node: collapse if expanded, otherwise hop to the parent node
+    // (mirrors how `h` on a note steps out to its folder). (#439)
+    if (el.dataset.sidebarType === 'tag') {
+      const tag = el.dataset.sidebarTag
+      if (!tag) return
+      const expandable = el.dataset.sidebarTagExpandable === '1'
+      if (expandable && !state.collapsedTagNodes.includes(tag)) {
+        toggleTagNodeKeepingCursor(tag, state)
+        return
+      }
+      const slash = tag.lastIndexOf('/')
+      if (slash >= 0) {
+        const parentEl = document.querySelector<HTMLElement>(
+          `[data-sidebar-type="tag"][data-sidebar-tag="${escapeForAttr(tag.slice(0, slash))}"]`
+        )
+        if (parentEl) scrollToIndexedElement(parentEl, 'sidebarIdx', state.setSidebarCursorIndex)
+      }
+      return
+    }
+
     const collapseFolder = (folderEl: HTMLElement | null): void => {
       if (!folderEl) return
       const collapseKey = folderEl.dataset.sidebarKey
@@ -2230,6 +2277,11 @@ export function VimNav(): JSX.Element | null {
     const dateNavKey = el.dataset.sidebarDatenavKey
     if (dateNavKey) {
       state.toggleDateNav(dateNavKey)
+      return
+    }
+    if (el.dataset.sidebarType === 'tag') {
+      const tag = el.dataset.sidebarTag
+      if (tag && el.dataset.sidebarTagExpandable === '1') toggleTagNodeKeepingCursor(tag, state)
       return
     }
     if (el.dataset.sidebarType !== 'folder') return

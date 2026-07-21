@@ -617,6 +617,8 @@ export function SettingsModal(): JSX.Element {
   const setDarkSidebar = useStore((s) => s.setDarkSidebar);
   const showSidebarChevrons = useStore((s) => s.showSidebarChevrons);
   const setShowSidebarChevrons = useStore((s) => s.setShowSidebarChevrons);
+  const nestedTags = useStore((s) => s.nestedTags);
+  const setNestedTags = useStore((s) => s.setNestedTags);
   const pdfExportUseTheme = useStore((s) => s.pdfExportUseTheme);
   const setPdfExportUseTheme = useStore((s) => s.setPdfExportUseTheme);
   const appUpdateState = useAppUpdateState();
@@ -1242,6 +1244,13 @@ export function SettingsModal(): JSX.Element {
             "Show disclosure arrows for collapsible folders and sidebar sections.",
           keywords: ["chevrons", "disclosure"],
         },
+        {
+          id: "nested-tags",
+          title: "Nested tags (tree view)",
+          description:
+            "Show /-separated tags as a collapsible tree in the sidebar and Tags view instead of a flat list.",
+          keywords: ["hierarchical", "tree", "tags", "nested", "hierarchy"],
+        },
       ],
       content: (
         <div className="space-y-6">
@@ -1647,6 +1656,13 @@ export function SettingsModal(): JSX.Element {
               value={showSidebarChevrons}
               settingId="sidebar-arrows"
               onChange={setShowSidebarChevrons}
+            />
+            <ToggleRow
+              label="Nested tags (tree view)"
+              description="Show /-separated tags (like project/compiler) as a collapsible tree in the sidebar and Tags view. Turn off for a flat list of full tag names."
+              value={nestedTags}
+              settingId="nested-tags"
+              onChange={setNestedTags}
             />
           </Section>
 

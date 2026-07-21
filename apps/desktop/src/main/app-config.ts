@@ -237,6 +237,11 @@ const SCALAR_FIELDS: Partial<Record<PortablePrefKey, ScalarFieldMap>> = {
       'none | manual | updated-desc | updated-asc | created-desc | created-asc | name-asc | name-desc'
   },
   groupByKind: { section: 'view', tomlKey: 'group_by_kind', comment: 'group notes by kind in the list' },
+  nestedTags: {
+    section: 'view',
+    tomlKey: 'nested_tags',
+    comment: 'show /-separated tags as a collapsible tree (sidebar + Tags view)'
+  },
   viewSettingsScope: {
     section: 'view',
     tomlKey: 'view_settings_scope',

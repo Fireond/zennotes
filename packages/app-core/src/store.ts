@@ -500,6 +500,11 @@ interface Prefs {
   /** Sidebar Tags section collapsed — keeps the tag pills hidden
    *  without removing the section entirely. */
   tagsCollapsed: boolean
+  /** Show `/`-separated tags as a collapsible tree (sidebar + Tags view)
+   *  instead of a flat list. Degrades to a flat list when no tag nests. (#439) */
+  nestedTags: boolean
+  /** Full paths of collapsed nodes in the nested-tag tree. */
+  collapsedTagNodes: string[]
   /** Auto-show the calendar panel when the active note is a daily or
    *  weekly note. Persisted. */
   autoCalendarPanel: boolean
@@ -781,6 +786,8 @@ export const DEFAULT_PREFS: Prefs = {
   noteRefs: {},
   contentAlign: 'center',
   tagsCollapsed: false,
+  nestedTags: true,
+  collapsedTagNodes: [],
   autoCalendarPanel: true,
   calendarWeekStart: 'monday',
   calendarShowWeekNumbers: true,
@@ -1030,6 +1037,10 @@ function normalizePrefs(p: Partial<Prefs>): Prefs {
         : DEFAULT_PREFS.contentAlign,
     tagsCollapsed:
       typeof p.tagsCollapsed === 'boolean' ? p.tagsCollapsed : DEFAULT_PREFS.tagsCollapsed,
+    nestedTags: typeof p.nestedTags === 'boolean' ? p.nestedTags : DEFAULT_PREFS.nestedTags,
+    collapsedTagNodes: Array.isArray(p.collapsedTagNodes)
+      ? p.collapsedTagNodes.filter((k): k is string => typeof k === 'string')
+      : DEFAULT_PREFS.collapsedTagNodes,
     autoCalendarPanel:
       typeof p.autoCalendarPanel === 'boolean'
         ? p.autoCalendarPanel
@@ -1722,6 +1733,8 @@ function collectPrefs(s: {
   noteRefs: Record<string, { path: string; kind: 'note' | 'asset' }>
   contentAlign: 'center' | 'left'
   tagsCollapsed: boolean
+  nestedTags: boolean
+  collapsedTagNodes: string[]
   autoCalendarPanel: boolean
   calendarWeekStart: CalendarWeekStart
   calendarShowWeekNumbers: boolean
@@ -1796,6 +1809,8 @@ function collectPrefs(s: {
     noteRefs: s.noteRefs,
     contentAlign: s.contentAlign,
     tagsCollapsed: s.tagsCollapsed,
+    nestedTags: s.nestedTags,
+    collapsedTagNodes: s.collapsedTagNodes,
     autoCalendarPanel: s.autoCalendarPanel,
     calendarWeekStart: s.calendarWeekStart,
     calendarShowWeekNumbers: s.calendarShowWeekNumbers,
@@ -2293,6 +2308,11 @@ interface Store {
   /** Sidebar Tags section collapsed — hides the pill rail but keeps
    *  the section header visible as a toggle. Persisted. */
   tagsCollapsed: boolean
+  /** Render `/`-separated tags as a collapsible tree (sidebar + Tags view).
+   *  Persisted. (#439) */
+  nestedTags: boolean
+  /** Full paths of collapsed nodes in the nested-tag tree. Persisted. */
+  collapsedTagNodes: string[]
   /** Auto-show the calendar panel when the active note is a daily or
    *  weekly note. Persisted. */
   autoCalendarPanel: boolean
@@ -2702,6 +2722,9 @@ interface Store {
   setPdfEmbedInEditMode: (mode: 'compact' | 'full') => void
   setContentAlign: (align: 'center' | 'left') => void
   setTagsCollapsed: (collapsed: boolean) => void
+  setNestedTags: (enabled: boolean) => void
+  /** Toggle a nested-tag tree node between expanded and collapsed by its full path. */
+  toggleCollapseTagNode: (path: string) => void
   setAutoCalendarPanel: (enabled: boolean) => void
   setCalendarWeekStart: (start: CalendarWeekStart) => void
   setCalendarShowWeekNumbers: (show: boolean) => void
@@ -3788,6 +3811,8 @@ export const useStore = create<Store>((set, get) => {
   noteRefs: loadPrefs().noteRefs,
   contentAlign: loadPrefs().contentAlign,
   tagsCollapsed: loadPrefs().tagsCollapsed,
+  nestedTags: loadPrefs().nestedTags,
+  collapsedTagNodes: loadPrefs().collapsedTagNodes,
   autoCalendarPanel: loadPrefs().autoCalendarPanel,
   calendarWeekStart: loadPrefs().calendarWeekStart,
   calendarShowWeekNumbers: loadPrefs().calendarShowWeekNumbers,
@@ -6653,6 +6678,18 @@ export const useStore = create<Store>((set, get) => {
   },
   setTagsCollapsed: (collapsed) => {
     set({ tagsCollapsed: collapsed })
+    savePrefs(collectPrefs(get()))
+  },
+  setNestedTags: (enabled) => {
+    set({ nestedTags: enabled })
+    savePrefs(collectPrefs(get()))
+  },
+  toggleCollapseTagNode: (path) => {
+    set((s) =>
+      s.collapsedTagNodes.includes(path)
+        ? { collapsedTagNodes: s.collapsedTagNodes.filter((p) => p !== path) }
+        : { collapsedTagNodes: [...s.collapsedTagNodes, path] }
+    )
     savePrefs(collectPrefs(get()))
   },
   setAutoCalendarPanel: (enabled) => {
