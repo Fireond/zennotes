@@ -153,6 +153,12 @@ class TableWidget extends WidgetType {
    *  reach this contenteditable widget, so it is honored here directly. (#341) */
   private insertEscapeKeys: { ch: string; at: number }[] = []
   private pendingScope: 'i' | 'a' | null = null
+  /** Armed after `f`/`F`/`t`/`T`, waiting for the target character (#435). */
+  private pendingFind: 'f' | 'F' | 't' | 'T' | null = null
+  /** Armed after `r`, waiting for the replacement character (#435). */
+  private pendingReplace = false
+  /** Last `f`/`t` find, so `;`/`,` can repeat it. */
+  private lastFind: { cmd: 'f' | 'F' | 't' | 'T'; ch: string } | null = null
   /** Set in toDOM — CodeMirror hands the live view there. Block widgets are
    *  provided by a StateField, which has no view at build time. */
   private view!: EditorView
@@ -679,6 +685,28 @@ class TableWidget extends WidgetType {
           this.applyOperator(editable, op, event.key, cellText)
           return
         }
+        if (this.pendingReplace) {
+          // `r<char>`: replace the char under the cursor. Esc / non-printable
+          // cancels without changing anything.
+          event.preventDefault()
+          this.pendingReplace = false
+          if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            this.replaceChar(editable, event.key)
+          }
+          return
+        }
+        if (this.pendingFind) {
+          // Second key of `f`/`F`/`t`/`T`: the target char. Esc / non-printable
+          // cancels.
+          event.preventDefault()
+          const cmd = this.pendingFind
+          this.pendingFind = null
+          if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+            this.lastFind = { cmd, ch: event.key }
+            this.applyFind(editable, cmd, event.key, cellText, false)
+          }
+          return
+        }
         // Directional cell navigation. Honors the configurable nav keymaps
         // (defaults h/l/j/k) so non-QWERTY layouts can remap them (#213), and
         // arrow keys always work (#232). Only plain navigation is remappable —
@@ -739,6 +767,29 @@ class TableWidget extends WidgetType {
             this.cursorOffset = prevWordStart(cellText, this.cursorOffset)
             this.renderCellCursor(editable)
             return
+          case 'f':
+          case 'F':
+          case 't':
+          case 'T':
+            // Arm find-char; the next key is the target (#435).
+            event.preventDefault()
+            this.pendingFind = event.key as 'f' | 'F' | 't' | 'T'
+            return
+          case ';':
+            event.preventDefault()
+            if (this.lastFind) {
+              this.applyFind(editable, this.lastFind.cmd, this.lastFind.ch, cellText, true)
+            }
+            return
+          case ',': {
+            event.preventDefault()
+            if (this.lastFind) {
+              // Repeat the last find in the opposite direction.
+              const rev = { f: 'F', F: 'f', t: 'T', T: 't' } as const
+              this.applyFind(editable, rev[this.lastFind.cmd], this.lastFind.ch, cellText, true)
+            }
+            return
+          }
           case '0':
             event.preventDefault()
             this.cursorOffset = 0
@@ -787,14 +838,17 @@ class TableWidget extends WidgetType {
             this.view.focus()
             return
           case 'r':
-            // Ctrl-r → redo. Plain `r` is swallowed (no replace-char yet).
             event.preventDefault()
             if (event.ctrlKey) {
+              // Ctrl-r → redo.
               event.stopPropagation()
               this.commitIfDirty()
               redo(this.view)
               this.view.focus()
+              return
             }
+            // Plain `r`: arm replace-next-char (#435).
+            this.pendingReplace = true
             return
           case 'Escape':
             // Vim: Esc in normal mode is a no-op — don't jump out of the table.
@@ -1008,6 +1062,8 @@ class TableWidget extends WidgetType {
     this.insertEscapeKeys = []
     this.pendingOp = null
     this.pendingScope = null
+    this.pendingFind = null
+    this.pendingReplace = false
     this.visualMode = false
     this.visualScope = null
     this.clearCellCursor(cell)
@@ -1051,6 +1107,37 @@ class TableWidget extends WidgetType {
     cell.dataset.raw = next
     this.dirty = true
     this.cursorOffset = Math.max(0, Math.min(a, next.length - 1))
+    cell.textContent = next
+    cell.dataset.rendered = 'false'
+    this.renderCellCursor(cell)
+  }
+
+  /** Move the block cursor to `ch` per an `f`/`F`/`t`/`T` motion. `isRepeat`
+   *  (from `;`/`,`) nudges a till-motion past the char it's parked before so it
+   *  advances instead of getting stuck. No-op when the char isn't found. (#435) */
+  private applyFind(
+    cell: HTMLElement,
+    cmd: 'f' | 'F' | 't' | 'T',
+    ch: string,
+    text: string,
+    isRepeat: boolean
+  ): void {
+    const dir = cmd === 'f' || cmd === 't' ? 1 : -1
+    const till = cmd === 't' || cmd === 'T'
+    const from = isRepeat && till ? this.cursorOffset + dir : this.cursorOffset
+    const target = findChar(text, from, ch, dir, till)
+    if (target === null) return
+    this.cursorOffset = target
+    this.renderCellCursor(cell)
+  }
+
+  /** `r<char>`: replace the character under the block cursor. (#435) */
+  private replaceChar(cell: HTMLElement, ch: string): void {
+    const text = cell.dataset.raw ?? ''
+    if (this.cursorOffset >= text.length) return
+    const next = text.slice(0, this.cursorOffset) + ch + text.slice(this.cursorOffset + 1)
+    cell.dataset.raw = next
+    this.dirty = true
     cell.textContent = next
     cell.dataset.rendered = 'false'
     this.renderCellCursor(cell)
@@ -1316,6 +1403,29 @@ export function prevWordStart(text: string, off: number): number {
   const cls = charClass(text[i])
   while (i > 0 && charClass(text[i - 1]) === cls) i--
   return Math.max(0, i)
+}
+
+/** Vim `f`/`t`/`F`/`T`: index of `ch` searching from `off` in `dir` (+1 forward,
+ *  -1 back), or null if not found. `till` (t/T) stops one char short of the
+ *  target. The search always starts one char past `off`. (#435) */
+export function findChar(
+  text: string,
+  off: number,
+  ch: string,
+  dir: 1 | -1,
+  till: boolean
+): number | null {
+  const n = text.length
+  if (dir === 1) {
+    for (let i = off + 1; i < n; i++) {
+      if (text[i] === ch) return till ? i - 1 : i
+    }
+  } else {
+    for (let i = off - 1; i >= 0; i--) {
+      if (text[i] === ch) return till ? i + 1 : i
+    }
+  }
+  return null
 }
 
 /** Vim `e`: index of the end of the current/next word. */
