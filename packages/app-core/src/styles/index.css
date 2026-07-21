@@ -4860,6 +4860,44 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   margin: 4px 6px;
   background: rgb(var(--z-bg-3) / 0.7);
 }
+.cm-table-menu-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgb(var(--z-bg-3) / 0.5);
+  font-family: var(--z-mono-font, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+}
+.cm-table-menu-filter-label {
+  color: rgb(var(--z-grey-1));
+}
+.cm-table-menu-filter-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(var(--z-fg));
+}
+.cm-table-menu-filter-count {
+  color: rgb(var(--z-grey-1));
+}
+.cm-table-menu-match {
+  color: rgb(var(--z-accent));
+  font-weight: 600;
+}
+.cm-table-menu-item:hover:not(:disabled) .cm-table-menu-match {
+  color: #fff;
+}
+.cm-table-menu-empty {
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(var(--z-grey-1));
+}
 
 .cm-wysiwyg .cm-editor .cm-wq-quote {
   border-left: 3px solid rgb(var(--z-accent) / 0.45);
