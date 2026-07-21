@@ -6565,6 +6565,11 @@ export const useStore = create<Store>((set, get) => {
       } else {
         await get().selectNote(meta.path)
       }
+      // Land keyboard focus in the editor so typing starts immediately. This
+      // flow is usually fired from outside the editor — the Leader menu, the
+      // command palette, a folder menu — where focus would otherwise stay on
+      // the picker/prompt that just closed. (#436, mirrors the daily-note flow)
+      requestEditorFocus()
     } catch (err) {
       console.error('createFromTemplate failed', err)
     }
