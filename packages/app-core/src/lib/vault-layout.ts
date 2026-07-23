@@ -647,6 +647,7 @@ export function normalizeVaultSettings(
     },
     drawingsLocation: normalizeFileLocation(settings?.drawingsLocation),
     databasesLocation: normalizeFileLocation(settings?.databasesLocation),
+    tasksLocation: normalizeFileLocation(settings?.tasksLocation),
     folderIcons: normalizedFolderIcons,
     folderColors: normalizedFolderColors,
     favorites: normalizedFavorites,

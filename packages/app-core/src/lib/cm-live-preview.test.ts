@@ -59,7 +59,7 @@ function mountMathEditor(doc: string, anchor: number): EditorView {
         syntaxHighlighting(emphasisTestHighlight),
         livePreviewPlugin,
         wysiwygBlocksPlugin,
-        mathRenderExtension
+        mathRenderExtension('katex')
       ]
     })
   })

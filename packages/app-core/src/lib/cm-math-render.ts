@@ -1,5 +1,5 @@
 /**
- * WYSIWYG KaTeX rendering for the editor's live preview:
+ * WYSIWYG math rendering for the editor's live preview (KaTeX or Typst):
  *  - inline `$…$` renders as an inline formula
  *  - block `$$…$$` (whose fences own their lines) renders as a centered display
  *    formula
@@ -18,9 +18,18 @@
  * WYSIWYG-only: registered via `wysiwygExtensions()`.
  */
 import { syntaxTree } from '@codemirror/language'
-import { RangeSetBuilder, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { Facet, RangeSetBuilder, StateField, type EditorState, type Extension } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, WidgetType } from '@codemirror/view'
 import katex from 'katex'
+import type { MathRenderer } from '@shared/app-config'
+import { peekTypstMathSvg, renderTypstMathToSvg } from './typst-math-render'
+
+/** Which typesetter the live-preview widgets use. Supplied by
+ *  `mathRenderExtension(renderer)` and re-read whenever the editor reconfigures
+ *  it (see the facet check in `mathRenderField.update`). */
+const mathRendererFacet = Facet.define<MathRenderer, MathRenderer>({
+  combine: (values) => (values.length ? values[values.length - 1] : 'katex')
+})
 
 // Inline `$…$`: a single dollar (not `$$`), opening not escaped or space-led,
 // closing not space-trailed. Mirrors remark-math so currency like `$5` is left
@@ -43,16 +52,57 @@ function renderKatex(el: HTMLElement, latex: string, display: boolean): void {
   }
 }
 
+function showTypstError(el: HTMLElement, latex: string, display: boolean, message: string): void {
+  el.textContent = display ? `$$${latex}$$` : `$${latex}$`
+  el.classList.add('cm-math-error')
+  el.title = `Typst error: ${message}`
+}
+
+/**
+ * Render Typst math into `el`. A cached formula paints synchronously; otherwise
+ * the element stays empty for one frame and fills when the WASM compiler
+ * resolves (instant after the first render warms it up). The `latex`/`display`
+ * captured in the closure are re-checked so a stale async result can't overwrite
+ * a widget that has since been recycled to different content.
+ */
+function renderTypst(el: HTMLElement, latex: string, display: boolean): void {
+  const cached = peekTypstMathSvg(latex, display)
+  if (cached) {
+    if (cached.ok) el.innerHTML = cached.svg
+    else showTypstError(el, latex, display, cached.error)
+    return
+  }
+  void renderTypstMathToSvg(latex, display).then((result) => {
+    if (result.ok) {
+      el.innerHTML = result.svg
+      el.classList.remove('cm-math-error')
+      el.removeAttribute('title')
+    } else {
+      showTypstError(el, latex, display, result.error)
+    }
+  })
+}
+
+function renderMath(el: HTMLElement, latex: string, display: boolean, renderer: MathRenderer): void {
+  if (renderer === 'typst') renderTypst(el, latex, display)
+  else renderKatex(el, latex, display)
+}
+
 class InlineMathWidget extends WidgetType {
   constructor(
     readonly latex: string,
     /** Offset from the replacement range start to `latex` in the document. */
-    readonly sourceOffset: number
+    readonly sourceOffset: number,
+    readonly renderer: MathRenderer
   ) {
     super()
   }
   eq(other: InlineMathWidget): boolean {
-    return other.latex === this.latex && other.sourceOffset === this.sourceOffset
+    return (
+      other.latex === this.latex &&
+      other.sourceOffset === this.sourceOffset &&
+      other.renderer === this.renderer
+    )
   }
   toDOM(): HTMLElement {
     const el = document.createElement('span')
@@ -60,10 +110,10 @@ class InlineMathWidget extends WidgetType {
     // Replacement widgets hide their document range from CodeMirror's
     // `visibleRanges`. Keep the original formula on the opaque widget so
     // view-level features such as Vim Flash can still search it without
-    // parsing KaTeX's generated DOM back into LaTeX.
+    // parsing the renderer's generated DOM back into source.
     el.dataset.mathSource = this.latex
     el.dataset.mathSourceOffset = String(this.sourceOffset)
-    renderKatex(el, this.latex, false)
+    renderMath(el, this.latex, false, this.renderer)
     return el
   }
   ignoreEvent(): boolean {
@@ -75,35 +125,51 @@ class BlockMathWidget extends WidgetType {
   constructor(
     readonly latex: string,
     /** Offset from the replacement range start to `latex` in the document. */
-    readonly sourceOffset: number
+    readonly sourceOffset: number,
+    readonly renderer: MathRenderer
   ) {
     super()
   }
   eq(other: BlockMathWidget): boolean {
-    return other.latex === this.latex && other.sourceOffset === this.sourceOffset
+    return (
+      other.latex === this.latex &&
+      other.sourceOffset === this.sourceOffset &&
+      other.renderer === this.renderer
+    )
   }
   toDOM(): HTMLElement {
     const el = document.createElement('div')
     el.className = 'cm-math-block'
     el.dataset.mathSource = this.latex
     el.dataset.mathSourceOffset = String(this.sourceOffset)
-    renderKatex(el, this.latex, true)
+    renderMath(el, this.latex, true, this.renderer)
     return el
+  }
+  // Let CodeMirror handle clicks (like the inline widget) so clicking a rendered
+  // block places the cursor in it and reveals the raw source for editing —
+  // otherwise the only way in is keyboard navigation.
+  ignoreEvent(): boolean {
+    return false
   }
 }
 
 type MathKind = 'inline' | 'block'
 
-/** Read-only KaTeX copy shown below the formula whose source is being edited. */
+/** Read-only rendered copy shown below the formula whose source is being edited. */
 class MathEditPreviewWidget extends WidgetType {
   constructor(
     readonly latex: string,
-    readonly kind: MathKind
+    readonly kind: MathKind,
+    readonly renderer: MathRenderer
   ) {
     super()
   }
   eq(other: MathEditPreviewWidget): boolean {
-    return other.latex === this.latex && other.kind === this.kind
+    return (
+      other.latex === this.latex &&
+      other.kind === this.kind &&
+      other.renderer === this.renderer
+    )
   }
   toDOM(): HTMLElement {
     const el = document.createElement('div')
@@ -112,10 +178,10 @@ class MathEditPreviewWidget extends WidgetType {
     el.dataset.mathDisplay = this.kind
     // The editable source immediately above is the accessible representation.
     // Announcing a second copy after every keystroke would be noisy, and letting
-    // the browser edit/select KaTeX's generated DOM would fight CodeMirror.
+    // the browser edit/select the generated DOM would fight CodeMirror.
     el.setAttribute('contenteditable', 'false')
     el.setAttribute('aria-hidden', 'true')
-    renderKatex(el, this.latex, this.kind === 'block')
+    renderMath(el, this.latex, this.kind === 'block', this.renderer)
     return el
   }
 }
@@ -189,6 +255,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
   const sourceRanges: MathSourceRange[] = []
   const doc = state.doc
   const text = doc.toString()
+  const renderer = state.facet(mathRendererFacet)
 
   // --- Block math `$$…$$` ------------------------------------------------
   BLOCK_MATH_RE.lastIndex = 0
@@ -224,7 +291,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
           deco: Decoration.widget({
             block: true,
             side: 1,
-            widget: new MathEditPreviewWidget(inner, 'block')
+            widget: new MathEditPreviewWidget(inner, 'block', renderer)
           })
         })
       }
@@ -235,7 +302,11 @@ function buildMathRender(state: EditorState): MathRenderValue {
       to: closeLine.to,
       deco: Decoration.replace({
         block: true,
-        widget: new BlockMathWidget(inner, rawFrom + 2 - openLine.from)
+        widget: new BlockMathWidget(
+          inner,
+          rawFrom + 2 - openLine.from,
+          renderer
+        )
       })
     })
   }
@@ -268,7 +339,7 @@ function buildMathRender(state: EditorState): MathRenderValue {
             deco: Decoration.widget({
               block: true,
               side: 1,
-              widget: new MathEditPreviewWidget(inner, 'inline')
+              widget: new MathEditPreviewWidget(inner, 'inline', renderer)
             })
           })
         }
@@ -277,7 +348,9 @@ function buildMathRender(state: EditorState): MathRenderValue {
       pending.push({
         from,
         to,
-        deco: Decoration.replace({ widget: new InlineMathWidget(inner, 1) })
+        deco: Decoration.replace({
+          widget: new InlineMathWidget(inner, 1, renderer)
+        })
       })
     }
   }
@@ -292,9 +365,16 @@ function buildMathRender(state: EditorState): MathRenderValue {
 const mathRenderField = StateField.define<MathRenderValue>({
   create: (state) => buildMathRender(state),
   update(value, tr) {
-    // Rebuild on edits, on cursor moves (to reveal/hide the active formula), and
-    // when the parser advances (isInsideCode reads the syntax tree).
-    if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) {
+    // Rebuild on edits, on cursor moves (to reveal/hide the active formula), when
+    // the parser advances (isInsideCode reads the syntax tree), and when the math
+    // engine is switched (the facet is reconfigured via the live-preview
+    // compartment; see EditorPane).
+    if (
+      tr.docChanged ||
+      tr.selection ||
+      syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
+      tr.startState.facet(mathRendererFacet) !== tr.state.facet(mathRendererFacet)
+    ) {
       return buildMathRender(tr.state)
     }
     return value
@@ -322,4 +402,12 @@ export function mathSourceRanges(state: EditorState): readonly MathSourceRange[]
   return state.field(mathRenderField, false)?.sourceRanges ?? []
 }
 
-export const mathRenderExtension: Extension = [mathRenderField]
+/**
+ * Live-preview math rendering for the given engine. The `renderer` rides in on a
+ * facet so switching KaTeX ⇄ Typst reconfigures cleanly (via the live-preview
+ * compartment) without swapping the StateField itself, so `mathBlockLineRanges`
+ * keeps its stable field reference.
+ */
+export function mathRenderExtension(renderer: MathRenderer): Extension {
+  return [mathRendererFacet.of(renderer), mathRenderField]
+}

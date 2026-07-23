@@ -1,4 +1,5 @@
 import type { EditorState } from '@codemirror/state'
+import { embedBlockLineRanges } from './cm-embed-render'
 import { mathBlockLineRanges } from './cm-math-render'
 import { tikzBlockLineRanges } from './cm-tikz-render'
 
@@ -20,7 +21,11 @@ export interface RenderedBlockLineRange {
 export function renderedBlockLineRanges(
   state: EditorState
 ): readonly RenderedBlockLineRange[] {
-  return [...mathBlockLineRanges(state), ...tikzBlockLineRanges(state)].sort(
+  return [
+    ...mathBlockLineRanges(state),
+    ...tikzBlockLineRanges(state),
+    ...embedBlockLineRanges(state)
+  ].sort(
     (a, b) => a.fromLine - b.fromLine || a.toLine - b.toLine
   )
 }

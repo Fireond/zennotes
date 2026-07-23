@@ -1450,10 +1450,12 @@ textarea,
   border: 2px solid transparent;
 }
 
-.workspace-tab-strip {
-  scrollbar-color: var(--scrollbar) transparent;
-}
-
+/* Keep the horizontal tab-strip scrollbar slim (6px) so it doesn't eat into the
+   tab height and clip titles in Compact density (#421). NOTE: do not set the
+   standard `scrollbar-color`/`scrollbar-width` here — in Chromium those opt the
+   element into standard scrollbar rendering and *disable* the `::-webkit-
+   scrollbar` rule below, which is what silently left a fat ~15px bar. The thumb
+   colour comes from the global `::-webkit-scrollbar-thumb` rule. */
 .workspace-tab-strip::-webkit-scrollbar {
   height: 6px;
 }
@@ -2058,20 +2060,46 @@ html[data-completed-task-style="gray-strikethrough"] .cm-editor .cm-task-done * 
 .cm-editor .cm-frontmatter-line {
   font-size: 0.84em;
   line-height: 1.85;
-  color: rgb(var(--z-grey-1));
+  color: rgb(var(--z-fg));
   background: rgb(var(--z-bg-1) / 0.5);
   padding-left: 0.85em;
   padding-right: 0.85em;
   border-left: 1px solid rgb(var(--z-grey-0) / 0.13);
   border-right: 1px solid rgb(var(--z-grey-0) / 0.13);
 }
-.cm-editor .cm-frontmatter-line :is(.tok-meta, .tok-string, .tok-keyword, .tok-atom) {
+.cm-editor .cm-frontmatter-line
+  :is(
+    .tok-meta,
+    .tok-string,
+    .tok-keyword,
+    .tok-atom,
+    .tok-heading,
+    .tok-heading1,
+    .tok-heading2,
+    .tok-heading3,
+    .tok-heading4,
+    .tok-heading5,
+    .tok-heading6
+  ) {
   color: inherit;
 }
-/* The key (before the `:`) is a muted label; the value keeps the normal color. */
+/* Without a blank line before the closing `---`, CodeMirror's markdown parser
+ * can tokenize the previous frontmatter line as a setext heading. The metadata
+ * card owns frontmatter presentation, so suppress body heading typography here. */
+.cm-editor .cm-frontmatter-line
+  :is(.tok-heading, .tok-heading1, .tok-heading2, .tok-heading3, .tok-heading4, .tok-heading5, .tok-heading6) {
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  text-transform: none;
+  letter-spacing: 0;
+}
+/* The key (before the `:`) is a muted-but-legible label; the value renders at
+ * normal text brightness (see the line rule above), so an all-frontmatter note
+ * like a task file stays readable instead of fading into the background. */
 .cm-editor .cm-frontmatter-key,
 .cm-editor .cm-frontmatter-key :is(.tok-meta, .tok-string, .tok-keyword, .tok-atom) {
-  color: rgb(var(--z-grey-0) / 0.62);
+  color: rgb(var(--z-grey-1));
   font-weight: 500;
 }
 /* The `---` fences become the card's quiet, rounded top/bottom edges: hide the
@@ -2969,6 +2997,37 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   margin-top: -0.25em;
 }
 
+/* Typst math (the KaTeX alternative; see typst-math-render.ts). Each formula is
+ * an SVG whose glyphs are recolored to currentColor, so it follows the theme for
+ * free. Inline spans sit in the text line; display divs get the same centered,
+ * paper-tinted box as `.katex-display` so the two engines read consistently. */
+.prose-zen .zen-typst-math {
+  display: inline-block;
+}
+.prose-zen .zen-typst-math svg {
+  max-width: 100%;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-display {
+  display: block;
+  text-align: center;
+  margin: 1.35em 0;
+  padding: 0.9em 1.1em;
+  background: color-mix(in srgb, theme("colors.paper.200") 70%, transparent);
+  border: 1px solid
+    color-mix(in srgb, theme("colors.paper.300") 70%, transparent);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-display + .zen-typst-display {
+  margin-top: -0.25em;
+}
+:is(.prose-zen, .cm-editor) .zen-typst-error {
+  font-family: var(--z-font-mono, ui-monospace, monospace);
+  color: rgb(var(--z-red, 255 69 58));
+  opacity: 0.85;
+}
+
 /* Strikethrough (`~~…~~`) around math. `.katex` renders as an inline-block,
  * an atomic inline that a parent <del>/<s> line-through is not painted across
  * (and setting `text-decoration` on `.katex` still won't cross its own nested
@@ -3584,6 +3643,221 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 .prose-zen .mermaid svg {
   max-width: 100%;
   height: auto;
+}
+
+/* URL embeds (```embed) — a responsive video/iframe card. `aspect-ratio` is set
+   inline per provider; the iframe fills the box. */
+.prose-zen .zen-embed {
+  margin: 1em 0;
+}
+:is(.prose-zen, .cm-embed-block) .zen-embed-frame {
+  position: relative;
+  width: min(680px, 100%);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgb(var(--z-bg-3) / 0.4);
+}
+:is(.prose-zen, .cm-embed-block) .zen-embed-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+:is(.prose-zen, .cm-embed-block) .zen-embed-unsupported {
+  padding: 10px 14px;
+  border: 1px dashed rgb(var(--z-bg-3) / 0.6);
+  border-radius: 10px;
+  font-size: 0.9em;
+  color: rgb(var(--z-fg-2));
+}
+
+/* Bookmark cards (```bookmark) — a Notion-style rich link preview. */
+.prose-zen .zen-bookmark {
+  margin: 1em 0;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-card {
+  display: flex;
+  align-items: stretch;
+  width: min(680px, 100%);
+  min-height: 92px;
+  border: 1px solid rgb(var(--z-bg-3) / 0.5);
+  border-radius: 10px;
+  overflow: hidden;
+  text-decoration: none !important;
+  color: inherit;
+  background: rgb(var(--z-bg-softer) / 0.5);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-card:hover {
+  background: rgb(var(--z-bg-softer) / 0.9);
+  border-color: rgb(var(--z-bg-3) / 0.8);
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-title {
+  font-weight: 600;
+  font-size: 0.95em;
+  line-height: 1.3;
+  color: rgb(var(--z-fg-1));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-desc {
+  font-size: 0.82em;
+  line-height: 1.4;
+  color: rgb(var(--z-fg-2));
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8em;
+  color: rgb(var(--z-fg-2));
+  overflow: hidden;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin: 0;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-thumb {
+  flex: 0 0 33%;
+  max-width: 220px;
+  overflow: hidden;
+  background: rgb(var(--z-bg-3) / 0.3);
+}
+:is(.prose-zen, .cm-embed-block) .zen-bookmark-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  margin: 0;
+  display: block;
+}
+/* Live-editor block widgets for ```embed / ```bookmark. Padding, not margin:
+   CodeMirror measures block widgets with getBoundingClientRect (excludes
+   margins), so vertical margin would drift the height map. */
+.cm-wysiwyg .cm-editor .cm-embed-block {
+  position: relative;
+  padding: 0.5em 0;
+  cursor: text;
+}
+/* Size the content wrapper to the media (a definite-width block, so the child
+   percentages resolve) — the hover ring and Edit pill hug the media instead of
+   the full-width block, so there's no dead space to the right. */
+.cm-wysiwyg .cm-editor .cm-embed-block .cm-embed-content {
+  position: relative;
+  display: block;
+  width: min(680px, 100%);
+  border-radius: 12px;
+  box-shadow: 0 0 0 0 rgb(var(--z-accent) / 0);
+  transition: box-shadow 120ms ease;
+}
+/* The media lives in its own child so its async re-render (bookmark metadata
+   replaces innerHTML) never disturbs the ring/pill on the content wrapper. */
+.cm-wysiwyg .cm-editor .cm-embed-block .cm-embed-media {
+  display: block;
+  width: 100%;
+}
+/* A clean, opaque 2px accent ring hugging the media, identical for video embeds
+   and bookmark cards. */
+.cm-wysiwyg .cm-editor .cm-embed-block:hover .cm-embed-content {
+  box-shadow: 0 0 0 2px rgb(var(--z-accent));
+}
+/* "Edit source" pill, revealed on hover, pinned to the media's top-right. */
+.cm-wysiwyg .cm-editor .cm-embed-edit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(var(--z-accent));
+  color: rgb(var(--z-bg));
+  font-size: 0.72em;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 0.35);
+}
+.cm-wysiwyg .cm-editor .cm-embed-block:hover .cm-embed-edit {
+  opacity: 1;
+}
+.cm-wysiwyg .cm-editor .cm-embed-edit:hover {
+  filter: brightness(1.08);
+}
+
+/* Notion-style paste menu (paste a URL onto an empty line). */
+.cm-tooltip.cm-url-paste-menu {
+  display: flex;
+  flex-direction: column;
+  /* A little breathing room so the menu doesn't sit flush against the link. */
+  margin-top: 9px;
+  padding: 4px;
+  min-width: 210px;
+  border: 1px solid rgb(var(--z-bg-3) / 0.6);
+  border-radius: 10px;
+  background: rgb(var(--z-bg-1));
+  box-shadow: var(--shadow-panel, 0 8px 28px rgb(0 0 0 / 0.28));
+  overflow: hidden;
+}
+.cm-url-paste-menu .cm-url-paste-header {
+  padding: 4px 10px 5px;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(var(--z-fg-2));
+}
+.cm-url-paste-menu .cm-url-paste-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: rgb(var(--z-fg-1));
+  font: inherit;
+}
+/* Keyboard-highlighted item (j/k/arrows). Mouse hover syncs to the same state
+   via mouseenter, so there's one consistent highlight for keyboard and mouse. */
+.cm-url-paste-menu .cm-url-paste-item.cm-url-paste-active {
+  background: rgb(var(--z-accent) / 0.16);
+}
+.cm-url-paste-menu .cm-url-paste-label {
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.cm-url-paste-menu .cm-url-paste-sub {
+  font-size: 0.75em;
+  color: rgb(var(--z-fg-2));
 }
 .zen-diagram-modal-host .zen-tikz,
 .zen-diagram-modal-host .zen-jsxgraph,
@@ -4613,6 +4887,44 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
   margin: 4px 6px;
   background: rgb(var(--z-bg-3) / 0.7);
 }
+.cm-table-menu-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgb(var(--z-bg-3) / 0.5);
+  font-family: var(--z-mono-font, ui-monospace, SFMono-Regular, monospace);
+  font-size: 12px;
+}
+.cm-table-menu-filter-label {
+  color: rgb(var(--z-grey-1));
+}
+.cm-table-menu-filter-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgb(var(--z-fg));
+}
+.cm-table-menu-filter-count {
+  color: rgb(var(--z-grey-1));
+}
+.cm-table-menu-match {
+  color: rgb(var(--z-accent));
+  font-weight: 600;
+}
+.cm-table-menu-item:hover:not(:disabled) .cm-table-menu-match {
+  color: #fff;
+}
+.cm-table-menu-empty {
+  padding: 6px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: rgb(var(--z-grey-1));
+}
 
 .cm-wysiwyg .cm-editor .cm-wq-quote {
   border-left: 3px solid rgb(var(--z-accent) / 0.45);
@@ -4790,6 +5102,28 @@ html[data-completed-task-style="gray-strikethrough"] .prose-zen li.task-list-ite
 .cm-wysiwyg .cm-editor .cm-math-error {
   font-family: var(--z-font-mono, ui-monospace, monospace);
   opacity: 0.75;
+}
+/* Typst live-preview widgets fill the same `.cm-math-*` hosts with an SVG whose
+   glyphs are currentColor, so they inherit the editor text color and theme.
+   `pointer-events: none` keeps the SVG's own text-selection layer from
+   swallowing the click, so it reaches CodeMirror and reveals the source. */
+.cm-wysiwyg .cm-editor :is(.cm-math-inline, .cm-math-block) svg {
+  max-width: 100%;
+  pointer-events: none;
+}
+/* A Typst display block renders as a bare <svg> directly inside `.cm-math-block`
+   (KaTeX's box comes from its inner `.katex-display`). Give it the same paper-tint
+   box so both engines read identically. `:has(> svg)` matches only the Typst case
+   — KaTeX emits spans, not a direct svg child. Padding, not margin: CodeMirror
+   measures block widgets with getBoundingClientRect, which excludes margins. */
+.cm-wysiwyg .cm-editor .cm-math-block:has(> svg) {
+  padding: 0.9em 1.1em;
+  background: color-mix(in srgb, theme("colors.paper.200") 70%, transparent);
+  border: 1px solid
+    color-mix(in srgb, theme("colors.paper.300") 70%, transparent);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 /* Live-preview TikZ — a complete fenced block becomes an SVG while inactive,

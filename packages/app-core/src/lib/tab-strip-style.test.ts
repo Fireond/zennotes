@@ -27,6 +27,21 @@ describe('workspace tab strip overflow styles', () => {
     expect(stylesSource).not.toMatch(
       /\.workspace-tab-strip::-webkit-scrollbar\s*\{[^}]*display:\s*none/s
     )
+    // #421: setting the standard `scrollbar-color`/`scrollbar-width` on the strip
+    // makes Chromium ignore the `::-webkit-scrollbar` height above and fall back
+    // to a fat ~15px bar, which clipped tab titles in Compact density. Keep the
+    // rule element free of those so the slim 6px bar actually renders.
+    expect(stylesSource).not.toMatch(
+      /\.workspace-tab-strip\s*\{[^}]*scrollbar-(color|width)/s
+    )
+  })
+
+  it('does not force the no-wrap tab to the strip height, so the scrollbar cannot clip it (#421)', () => {
+    // `min-h-8` only belongs in wrap mode (a floor for wrapped rows). In no-wrap
+    // the tab must be free to size to the scroll area so the horizontal scrollbar
+    // never overlaps the title in Compact density.
+    expect(editorPaneSource).toContain("wrapTabs ? 'min-h-8' : ''")
+    expect(editorPaneSource).not.toMatch(/h-full min-h-8 min-w-0/)
   })
 
   it('persists a setting for wrapping tabs onto additional rows', () => {

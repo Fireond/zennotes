@@ -17,6 +17,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { promises as fsp } from 'node:fs'
+import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -155,6 +156,7 @@ import { VaultWatcher } from './watcher'
 import { WindowVaultRegistry } from './window-vaults'
 import { registerEphemeralRoot, isEphemeralRoot } from './ephemeral-vaults'
 import { renderTikz, stopTikzRenderer } from './tikz'
+import { fetchLinkMetadata } from './link-metadata'
 import { RemoteServerClient } from './remote/server-client'
 import {
   getMcpClientStatuses,
@@ -218,6 +220,13 @@ const developmentRendererUrl = resolveDevelopmentRendererUrl(
 const LOCAL_ASSET_SCHEME = 'zen-asset'
 const THEME_ASSET_SCHEME = 'zen-theme'
 const EXCALIDRAW_ASSET_SCHEME = 'zen-excalidraw'
+// Serves the Typst renderer's bundled assets (the compiler + renderer WASM and
+// the New Computer Modern fonts) to the renderer. On the packaged app the window
+// loads over file://, whose opaque origin makes the CSP `connect-src 'self'`
+// reject a plain fetch of these assets, so the Typst renderer requests them
+// through this scheme instead (added to connect-src in the renderer's
+// index.html). Web keeps fetching the same-origin http assets.
+const TYPST_ASSET_SCHEME = 'zen-typst'
 
 const PRIVILEGED_ASSET_PRIVILEGES = {
   standard: true,
@@ -230,7 +239,8 @@ const PRIVILEGED_ASSET_PRIVILEGES = {
 protocol.registerSchemesAsPrivileged([
   { scheme: LOCAL_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
   { scheme: THEME_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
-  { scheme: EXCALIDRAW_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES }
+  { scheme: EXCALIDRAW_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES },
+  { scheme: TYPST_ASSET_SCHEME, privileges: PRIVILEGED_ASSET_PRIVILEGES }
 ])
 
 let mainWindow: BrowserWindow | null = null
@@ -2639,6 +2649,32 @@ function registerIpc(): void {
     shell.showItemInFolder(absPath)
   })
 
+  // Open a file linked from a note but living outside the vault, with the OS
+  // default app. The renderer confirms with the user first (this could launch
+  // an app), so here we only resolve the href to an absolute path and open it.
+  handle(IPC.VAULT_OPEN_EXTERNAL_FILE, async (_e, href: string) => {
+    try {
+      const raw = String(href ?? '').trim()
+      if (!raw) return { ok: false, error: 'Empty path.' }
+      let abs: string
+      if (/^file:\/\//i.test(raw)) {
+        abs = fileURLToPath(raw)
+      } else if (raw === '~' || raw.startsWith('~/')) {
+        abs = path.join(homedir(), raw.slice(1))
+      } else {
+        abs = path.resolve(raw)
+      }
+      const error = await shell.openPath(abs)
+      return error ? { ok: false, error } : { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  handle(IPC.VAULT_FETCH_LINK_METADATA, async (_e, url: string) => {
+    return await fetchLinkMetadata(url)
+  })
+
   handle(
     IPC.VAULT_MOVE_NOTE,
     async (_e, relPath: string, targetFolder: NoteFolder, targetSubpath: string) => {
@@ -3712,6 +3748,32 @@ app.whenReady().then(async () => {
     })
   })
 
+  protocol.handle(TYPST_ASSET_SCHEME, async (request) => {
+    // zen-typst://asset/<file> -> out/renderer/assets/<file> (the renderer's own
+    // bundled assets, next to its JS chunks). The renderer only ever requests
+    // the hashed Typst wasm and .otf fonts it imported, so this is a fixed,
+    // read-only view of the build output, scoped to those two asset kinds.
+    const rel = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '')
+    const root = path.resolve(__dirname, '../renderer/assets')
+    const abs = path.resolve(root, rel)
+    if (abs !== root && !abs.startsWith(root + path.sep)) {
+      throw new Error(`Invalid Typst asset URL: ${request.url}`)
+    }
+    const contentType = /\.wasm$/i.test(abs)
+      ? 'application/wasm'
+      : /\.otf$/i.test(abs)
+        ? 'font/otf'
+        : null
+    if (!contentType) throw new Error(`Invalid Typst asset URL: ${request.url}`)
+    const data = await fsp.readFile(abs)
+    return new Response(data, {
+      headers: {
+        'content-type': contentType,
+        'cache-control': 'public, max-age=31536000, immutable'
+      }
+    })
+  })
+
   // Permissions this app grants to its own renderer (deny everything else —
   // it's our app talking to our own vault, no third-party surface):
   //   - 'local-fonts'   → queryLocalFonts() for the font picker
@@ -3737,6 +3799,28 @@ app.whenReady().then(async () => {
   // async request handler — grant the same set here or they still fail.
   session.defaultSession.setPermissionCheckHandler((_wc, permission) =>
     GRANTED_PERMISSIONS.has(permission as string)
+  )
+
+  // `renderEmbeds` drops YouTube/Vimeo players into iframes. The packaged app
+  // loads over file://, so those requests carry a null Referer/Origin and the
+  // providers reject the embed (YouTube "Error 153"). Give them a valid
+  // same-site referrer so the player loads, matching what a normal web embed
+  // sends. Scoped to the exact embed hosts.
+  const EMBED_REFERERS: Record<string, string> = {
+    'www.youtube-nocookie.com': 'https://zennotes.app/',
+    'player.vimeo.com': 'https://zennotes.app/'
+  }
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['https://www.youtube-nocookie.com/*', 'https://player.vimeo.com/*'] },
+    (details, callback) => {
+      try {
+        const referer = EMBED_REFERERS[new URL(details.url).hostname]
+        if (referer) details.requestHeaders['Referer'] = referer
+      } catch {
+        /* leave headers unchanged on a malformed URL */
+      }
+      callback({ requestHeaders: details.requestHeaders })
+    }
   )
 
   // macOS dock icon. `BrowserWindow.icon` has no effect on macOS — the

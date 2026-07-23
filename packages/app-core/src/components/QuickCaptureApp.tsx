@@ -59,10 +59,9 @@ import { searchKeymap } from '@codemirror/search'
 import {
   autocompletion,
   closeCompletion,
-  completionKeymap,
   completionStatus
 } from '@codemirror/autocomplete'
-import { completionNavKeymap } from '../lib/cm-completion-nav'
+import { completionKeymapForEditor, completionNavKeymap } from '../lib/cm-completion-nav'
 import { slashCommandRender, templateSlashCommandSource } from '../lib/cm-slash-commands'
 import { calloutTypeSource } from '../lib/cm-callouts'
 import type { NoteMeta } from '@shared/ipc'
@@ -459,6 +458,9 @@ export function QuickCaptureApp(): JSX.Element {
           // Notion-style `/` slash commands — same block inserters as the main
           // editor, minus the store-dependent "Page" (no active note here). (#182)
           autocompletion({
+            // See EditorPane: skip the stock keymap so mac `Alt-`` / `Alt-i`
+            // don't swallow those characters on AltGr-style layouts (#429).
+            defaultKeymap: false,
             override: [templateSlashCommandSource, calloutTypeSource],
             addToOptions: [{ render: slashCommandRender.render, position: 0 }],
             icons: false,
@@ -485,7 +487,7 @@ export function QuickCaptureApp(): JSX.Element {
           ),
           keymap.of([
             indentWithTab,
-            ...completionKeymap,
+            ...completionKeymapForEditor,
             ...vimAwareDefaultKeymap(prefs.vimMode),
             ...vimAwareAuxiliaryKeymap(historyKeymap, prefs.vimMode),
             ...vimAwareAuxiliaryKeymap(searchKeymap, prefs.vimMode)

@@ -4,9 +4,9 @@ This file is the durable handoff for changes maintained by this fork. Git
 history and regression tests remain the source of truth; update this summary
 after adding a fork-only feature or merging a new upstream release.
 
-Last reviewed: 2026-07-19
+Last reviewed: 2026-07-23
 
-Upstream baseline: ZenNotes v2.14.0 (`8025f63`)
+Upstream baseline: ZenNotes v2.15.0 (`8a55da7`)
 
 ## Maintained fork features
 
@@ -19,7 +19,7 @@ Upstream baseline: ZenNotes v2.14.0 (`8025f63`)
 | LuaSnip Markdown migration | `feat(editor): import LuaSnip Markdown snippets` (this document's commit) | Statically imports LuaSnip `markdown`, inherited groups such as `tex_shared`, and `all` into the main editor, with autosnippets, fields, choices, mirrors, captures, selected text, contexts, and Vim-style control keys. |
 | Live math edit preview | `feat(editor): preview active math while editing` (this document's commit) | Keeps the active `$…$` or `$$…$$` source editable while rendering a real-time KaTeX copy directly below it. |
 | LaTeX source highlighting | `feat(editor): highlight LaTeX math source` (this document's commit) | Gives editable math a distinct theme color and syntax-colors commands, operators, numbers, brackets, and comments without exposing formula-internal Markdown syntax. |
-| Flash-style Vim motions | `aab45c7` | Adds case-insensitive incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
+| Flash-style Vim motions | `aab45c7` | Adds smart-case incremental `s` jumps, labels, enhanced repeatable `f`/`F`, and matching/jumping within rendered math. |
 | TikZ Edit-mode preview and isolated compiler | `feat(desktop): render TikZ diagrams` (this document's commit) | Extends upstream's Preview/Split/export renderer with Edit-mode widgets and navigation, plus a bounded utility worker with timeout, caching, sanitization, and crash recovery. |
 | Packaged renderer isolation | `fix(desktop): ignore dev renderer URL when packaged` (this document's commit) | Makes packaged builds always load their bundled renderer, even when the launching shell exports electron-vite's `ELECTRON_RENDERER_URL`. |
 

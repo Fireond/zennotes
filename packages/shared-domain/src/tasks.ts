@@ -60,6 +60,16 @@ export interface VaultTask {
   status?: string
   /** Inline `#tags` found on the line. */
   tags: string[]
+  /** How this task is stored. `'file'` is a whole-note task (TaskNotes-style:
+   *  a `.md` file tagged `#task`, metadata in frontmatter); `'inline'` (the
+   *  default when absent) is a classic `- [ ]` checkbox line. File-tasks
+   *  round-trip through frontmatter, not the checkbox, so mutators branch on
+   *  this. */
+  kind?: 'inline' | 'file'
+  /** ISO YYYY-MM-DD start/scheduled date (frontmatter `scheduled`). File-tasks. */
+  scheduled?: string
+  /** ISO YYYY-MM-DD completion date (frontmatter `completedDate`). File-tasks. */
+  completedDate?: string
 }
 
 export interface VaultTaskGroups {
@@ -99,7 +109,8 @@ function normalizePriority(raw: string | undefined): TaskPriority | undefined {
   if (!raw) return undefined
   const v = raw.toLowerCase().trim()
   if (v === 'high' || v === 'h') return 'high'
-  if (v === 'med' || v === 'medium' || v === 'm') return 'med'
+  // `normal` is the TaskNotes default priority; map it onto ZenNotes' `med`.
+  if (v === 'med' || v === 'medium' || v === 'normal' || v === 'm') return 'med'
   if (v === 'low' || v === 'l') return 'low'
   return undefined
 }
@@ -306,6 +317,111 @@ export function parseTasksFromBody(body: string, ctx: ParseTasksContext): VaultT
   }
 
   return tasks
+}
+
+// ---------------------------------------------------------------------------
+// File tasks (TaskNotes-style: one task per note, metadata in frontmatter)
+// ---------------------------------------------------------------------------
+
+/** The frontmatter tag that marks a whole note as a task (TaskNotes
+ *  convention, interoperable with TaskForge / Obsidian TaskNotes). */
+export const TASK_FILE_TAG = 'task'
+
+/** Frontmatter `status:` values treated as complete (checked). */
+const DONE_STATUSES = new Set(['done', 'complete', 'completed', 'x'])
+
+/** Parse a leading frontmatter block into flat fields, handling scalars, inline
+ *  arrays (`tags: [a, b]`) and block lists (`tags:` then `  - a`). Keys are
+ *  lower-cased; values are a string, or string[] for a list. Best-effort and
+ *  never throws — just enough YAML for task files, not a full parser. */
+function parseTaskFrontmatter(block: string): Record<string, string | string[]> {
+  const data: Record<string, string | string[]> = {}
+  let listKey: string | null = null
+  for (const rawLine of block.split('\n')) {
+    if (!rawLine.trim() || rawLine.trim().startsWith('#')) continue
+    const item = rawLine.match(/^\s*-\s+(.*)$/)
+    if (listKey && /^\s/.test(rawLine) && item) {
+      const arr = data[listKey]
+      if (Array.isArray(arr)) arr.push(unquote(item[1]))
+      continue
+    }
+    const kv = rawLine.match(/^([A-Za-z0-9_][\w-]*)\s*:\s*(.*)$/)
+    if (!kv) {
+      listKey = null
+      continue
+    }
+    const key = kv[1].toLowerCase()
+    const rest = kv[2].trim()
+    if (rest === '') {
+      // Bare key: a block list may follow on indented `- item` lines.
+      listKey = key
+      data[key] = []
+      continue
+    }
+    listKey = null
+    if (rest.startsWith('[') && rest.endsWith(']')) {
+      data[key] = rest
+        .slice(1, -1)
+        .split(',')
+        .map((s) => unquote(s))
+        .filter((s) => s.length > 0)
+    } else {
+      data[key] = unquote(rest)
+    }
+  }
+  return data
+}
+
+function asArray(v: string | string[] | undefined): string[] {
+  if (v == null) return []
+  return Array.isArray(v) ? v : [v]
+}
+
+function firstScalar(v: string | string[] | undefined): string | undefined {
+  if (v == null) return undefined
+  return Array.isArray(v) ? v[0] : v
+}
+
+/**
+ * Parse a whole-note "file task" from `body`, or return null when the note is
+ * not a task file (its frontmatter `tags` don't include `task`). All metadata
+ * comes from frontmatter; the note body is free-form notes about the task. This
+ * is emitted *in addition* to any inline `- [ ]` checkboxes in the same body
+ * (which act as subtasks), each keeping its own id.
+ */
+export function parseTaskFile(body: string, ctx: ParseTasksContext): VaultTask | null {
+  const normalized = body.replace(/\r\n/g, '\n')
+  const m = normalized.match(FRONTMATTER_RE)
+  if (!m) return null
+  const fm = parseTaskFrontmatter(m[1])
+
+  const tags = asArray(fm.tags).map((t) => t.replace(/^#/, '').toLowerCase())
+  if (!tags.includes(TASK_FILE_TAG)) return null
+
+  const status = (firstScalar(fm.status) ?? 'open').toLowerCase()
+  const title = firstScalar(fm.title)?.trim() || ctx.title
+
+  return {
+    id: `${ctx.path}#task`,
+    sourcePath: ctx.path,
+    noteTitle: ctx.title,
+    noteFolder: ctx.folder,
+    lineNumber: 0,
+    taskIndex: -1,
+    rawText: '',
+    content: title,
+    checked: DONE_STATUSES.has(status),
+    forwarded: false,
+    due: normalizeDueDate(firstScalar(fm.due)),
+    priority: normalizePriority(firstScalar(fm.priority)),
+    waiting: status === 'waiting',
+    fields: { status },
+    status,
+    tags: tags.filter((t) => t !== TASK_FILE_TAG),
+    kind: 'file',
+    scheduled: normalizeDueDate(firstScalar(fm.scheduled)),
+    completedDate: normalizeDueDate(firstScalar(fm.completeddate))
+  }
 }
 
 // ---------------------------------------------------------------------------

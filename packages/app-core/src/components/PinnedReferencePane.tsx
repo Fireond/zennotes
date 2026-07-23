@@ -42,7 +42,7 @@ import { markdownListIndentPlugin } from '../lib/cm-markdown-list-indent'
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { searchKeymap } from '@codemirror/search'
-import { autocompletion, completionKeymap } from '@codemirror/autocomplete'
+import { autocompletion } from '@codemirror/autocomplete'
 import { useStore } from '../store'
 import type { LineNumberMode } from '../store'
 import { livePreviewPlugin } from '../lib/cm-live-preview'
@@ -52,7 +52,7 @@ import { calloutTypeSource } from '../lib/cm-callouts'
 import { dateShortcutSource } from '../lib/cm-date-shortcuts'
 import { wikilinkSource, wikilinkHeadingSource } from '../lib/cm-wikilinks'
 import { hashtagSource } from '../lib/cm-hashtag-complete'
-import { completionNavKeymap } from '../lib/cm-completion-nav'
+import { completionKeymapForEditor, completionNavKeymap } from '../lib/cm-completion-nav'
 import {
   classifyLocalAssetHref,
   hrefFragment,
@@ -173,7 +173,7 @@ function buildPinnedEditorKeymap(
     ...baseKeymap,
     ...historyKeymap,
     ...editorSearchKeymap,
-    ...completionKeymap
+    ...completionKeymapForEditor
   ])
 }
 
@@ -276,6 +276,9 @@ export function PinnedReferencePane(): JSX.Element | null {
           lineNumbersCompartment.of(lineNumberExtension(s0.lineNumberMode)),
           tooltips({ parent: document.body }),
           autocompletion({
+            // See EditorPane: skip the stock keymap so mac `Alt-`` / `Alt-i`
+            // don't swallow those characters on AltGr-style layouts (#429).
+            defaultKeymap: false,
             override: [
               slashCommandSource,
               calloutTypeSource,

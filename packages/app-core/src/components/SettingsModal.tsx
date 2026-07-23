@@ -443,6 +443,10 @@ export function SettingsModal(): JSX.Element {
   );
   const completedTaskStyle = useStore((s) => s.completedTaskStyle);
   const setCompletedTaskStyle = useStore((s) => s.setCompletedTaskStyle);
+  const mathRenderer = useStore((s) => s.mathRenderer);
+  const setMathRenderer = useStore((s) => s.setMathRenderer);
+  const looseMathDelimiters = useStore((s) => s.looseMathDelimiters);
+  const setLooseMathDelimiters = useStore((s) => s.setLooseMathDelimiters);
   const keepViewModeAcrossNotes = useStore((s) => s.keepViewModeAcrossNotes);
   const setKeepViewModeAcrossNotes = useStore(
     (s) => s.setKeepViewModeAcrossNotes,
@@ -617,6 +621,8 @@ export function SettingsModal(): JSX.Element {
   const setDarkSidebar = useStore((s) => s.setDarkSidebar);
   const showSidebarChevrons = useStore((s) => s.showSidebarChevrons);
   const setShowSidebarChevrons = useStore((s) => s.setShowSidebarChevrons);
+  const nestedTags = useStore((s) => s.nestedTags);
+  const setNestedTags = useStore((s) => s.setNestedTags);
   const pdfExportUseTheme = useStore((s) => s.pdfExportUseTheme);
   const setPdfExportUseTheme = useStore((s) => s.setPdfExportUseTheme);
   const appUpdateState = useAppUpdateState();
@@ -1242,6 +1248,13 @@ export function SettingsModal(): JSX.Element {
             "Show disclosure arrows for collapsible folders and sidebar sections.",
           keywords: ["chevrons", "disclosure"],
         },
+        {
+          id: "nested-tags",
+          title: "Nested tags (tree view)",
+          description:
+            "Show /-separated tags as a collapsible tree in the sidebar and Tags view instead of a flat list.",
+          keywords: ["hierarchical", "tree", "tags", "nested", "hierarchy"],
+        },
       ],
       content: () => (
         <div className="space-y-6">
@@ -1648,6 +1661,13 @@ export function SettingsModal(): JSX.Element {
               settingId="sidebar-arrows"
               onChange={setShowSidebarChevrons}
             />
+            <ToggleRow
+              label="Nested tags (tree view)"
+              description="Show /-separated tags (like project/compiler) as a collapsible tree in the sidebar and Tags view. Turn off for a flat list of full tag names."
+              value={nestedTags}
+              settingId="nested-tags"
+              onChange={setNestedTags}
+            />
           </Section>
 
           <Section
@@ -1766,6 +1786,39 @@ export function SettingsModal(): JSX.Element {
             "vim",
             "plain text",
             "source",
+          ],
+        },
+        {
+          id: "math-renderer",
+          title: "Math renderer",
+          description:
+            "Choose KaTeX or Typst to typeset $…$ and $$…$$ math in the editor and reading view.",
+          keywords: [
+            "math",
+            "katex",
+            "typst",
+            "latex",
+            "equation",
+            "formula",
+            "renderer",
+            "typesetter",
+          ],
+        },
+        {
+          id: "loose-math-delimiters",
+          title: "Relaxed $$ math delimiters",
+          description:
+            "Render $$…$$ display math even with text before or after the fences, like LaTeX.",
+          keywords: [
+            "math",
+            "display",
+            "dollar",
+            "delimiter",
+            "fence",
+            "inline",
+            "latex",
+            "relaxed",
+            "loose",
           ],
         },
         {
@@ -2083,6 +2136,24 @@ export function SettingsModal(): JSX.Element {
                     { value: "gray-strikethrough", label: "Both" },
                   ]}
                   onChange={(next) => setCompletedTaskStyle(next)}
+                />
+                <SegmentedRow
+                  label="Math renderer"
+                  description="Which typesetter draws $…$ and $$…$$ math, in both the editor and the reading view. KaTeX reads the math as LaTeX; Typst reads it as Typst markup, so switching reinterprets existing formulas, and each note's math is written for whichever engine you pick."
+                  value={mathRenderer}
+                  settingId="math-renderer"
+                  options={[
+                    { value: "katex", label: "KaTeX" },
+                    { value: "typst", label: "Typst" },
+                  ]}
+                  onChange={(next) => setMathRenderer(next)}
+                />
+                <ToggleRow
+                  label="Relaxed $$ math delimiters"
+                  description="Render a $$…$$ display block even when text sits before the opening $$ (`Note: $$…$$`) or after the closing $$ (`$$…$$ done`), like LaTeX. Off by default; the surrounding text moves to its own line in the reading view, while the editor keeps showing the raw source. Leave off if you write literal $$ in prose."
+                  value={looseMathDelimiters}
+                  settingId="loose-math-delimiters"
+                  onChange={setLooseMathDelimiters}
                 />
                 <ToggleRow
                   label="Keep view mode when switching notes"
@@ -3018,8 +3089,8 @@ export function SettingsModal(): JSX.Element {
                 />
               </Section>
               <Section
-                title="New Drawings & Databases"
-                description="Where new Excalidraw drawings and databases are created, so they don't clutter the root of your vault."
+                title="New Drawings, Databases & Tasks"
+                description="Where new Excalidraw drawings, databases, and task files are created, so they don't clutter the root of your vault."
               >
                 <SegmentedRow
                   label="Default drawings location"
@@ -3083,6 +3154,39 @@ export function SettingsModal(): JSX.Element {
                       void persistVaultSettings({
                         ...vaultSettings,
                         databasesLocation: { mode: "folder", folder: next ?? "" },
+                      })
+                    }
+                  />
+                )}
+                <SegmentedRow
+                  label="Default tasks location"
+                  description="Where new task files (from `+ New task`, the `a` key, `:newtask`, or the command palette) are created. `New Task in Folder…` and `:newtask <folder>` still override this per task."
+                  value={vaultSettings.tasksLocation?.mode ?? "primary"}
+                  settingId="tasks-location"
+                  options={[
+                    { value: "primary", label: "Primary location" },
+                    { value: "active-note", label: "Active note's folder" },
+                    { value: "folder", label: "Specific folder" },
+                  ]}
+                  onChange={(mode) =>
+                    void persistVaultSettings({
+                      ...vaultSettings,
+                      tasksLocation: { ...vaultSettings.tasksLocation, mode },
+                    })
+                  }
+                />
+                {vaultSettings.tasksLocation?.mode === "folder" && (
+                  <TextInputRow
+                    label="Tasks folder"
+                    description="Vault-relative subfolder for new task files, e.g. `Tasks` or `Projects/Inbox`."
+                    value={vaultSettings.tasksLocation?.folder ?? ""}
+                    placeholder="Tasks"
+                    settingId="tasks-folder"
+                    commitOnBlur
+                    onChange={(next) =>
+                      void persistVaultSettings({
+                        ...vaultSettings,
+                        tasksLocation: { mode: "folder", folder: next ?? "" },
                       })
                     }
                   />

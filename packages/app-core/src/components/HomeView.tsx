@@ -3,6 +3,7 @@ import type { NoteMeta } from '@shared/ipc'
 import type { VaultTask } from '@shared/tasks'
 import { useStore } from '../store'
 import { computeTasksRender } from '../lib/tasks-filter'
+import { InlineMarkdown } from '../lib/inline-markdown'
 import {
   ArrowUpRightIcon,
   CalendarIcon,
@@ -290,9 +291,11 @@ export function HomeView({
                     onClick={() => void openTaskAt(task)}
                     className="flex min-w-0 flex-1 items-center gap-3 text-left focus:outline-none"
                   >
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink-800">
-                      {task.content || task.rawText}
-                    </span>
+                    <InlineMarkdown
+                      text={task.content || task.rawText}
+                      interactiveLinks={false}
+                      className="min-w-0 flex-1 truncate text-sm text-ink-800"
+                    />
                     <span className="shrink-0 truncate text-xs text-ink-400">{task.noteTitle}</span>
                   </button>
                 </li>

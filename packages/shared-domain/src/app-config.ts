@@ -24,6 +24,13 @@ export type TimeFormat = '12h' | '24h'
 export type CompletedTaskStyle = 'none' | 'strikethrough' | 'gray' | 'gray-strikethrough'
 
 /**
+ * Which typesetter renders `$…$` / `$$…$$` math. KaTeX (default) parses the
+ * body as LaTeX; Typst parses it as Typst markup, so a note's math is written
+ * for whichever engine is selected, not interchangeable between them.
+ */
+export type MathRenderer = 'katex' | 'typst'
+
+/**
  * The host locale's 12/24-hour convention, used as the `timeFormat` default so a
  * fresh install matches the operating system out of the box. Reads only the
  * resolved format options (no `Date`), so it is safe to evaluate at module load.
@@ -65,6 +72,8 @@ export const PORTABLE_PREF_KEYS = [
   'livePreview',
   'renderTablesInLivePreview',
   'completedTaskStyle',
+  'mathRenderer',
+  'looseMathDelimiters',
   'keepViewModeAcrossNotes',
   'markdownSnippets',
   'hideBuiltinTemplates',
@@ -101,6 +110,7 @@ export const PORTABLE_PREF_KEYS = [
   'systemFolderLabels',
   'noteSortOrder',
   'groupByKind',
+  'nestedTags',
   'autoReveal',
   'quickNoteDateTitle',
   'quickNoteTitlePrefix',
@@ -161,6 +171,8 @@ export const PORTABLE_DEFAULTS: Record<PortablePrefKey, unknown> = {
   livePreview: true,
   renderTablesInLivePreview: true,
   completedTaskStyle: 'none',
+  mathRenderer: 'katex',
+  looseMathDelimiters: false,
   keepViewModeAcrossNotes: false,
   markdownSnippets: true,
   hideBuiltinTemplates: false,
@@ -194,6 +206,7 @@ export const PORTABLE_DEFAULTS: Record<PortablePrefKey, unknown> = {
   systemFolderLabels: {},
   noteSortOrder: 'none',
   groupByKind: true,
+  nestedTags: true,
   autoReveal: false,
   quickNoteDateTitle: false,
   quickNoteTitlePrefix: 'Quick Note',

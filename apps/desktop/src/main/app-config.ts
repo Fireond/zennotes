@@ -149,6 +149,16 @@ const SCALAR_FIELDS: Partial<Record<PortablePrefKey, ScalarFieldMap>> = {
     tomlKey: 'keep_view_mode_across_notes',
     comment: 'keep the current Edit / Split / Preview mode when switching notes'
   },
+  mathRenderer: {
+    section: 'editor',
+    tomlKey: 'math_renderer',
+    comment: 'katex | typst: typesetter for $…$ / $$…$$ math'
+  },
+  looseMathDelimiters: {
+    section: 'editor',
+    tomlKey: 'loose_math_delimiters',
+    comment: 'render $$…$$ display math even with text before/after the fences'
+  },
   lineNumberMode: {
     section: 'editor',
     tomlKey: 'line_number_mode',
@@ -232,6 +242,11 @@ const SCALAR_FIELDS: Partial<Record<PortablePrefKey, ScalarFieldMap>> = {
       'none | manual | updated-desc | updated-asc | created-desc | created-asc | name-asc | name-desc'
   },
   groupByKind: { section: 'view', tomlKey: 'group_by_kind', comment: 'group notes by kind in the list' },
+  nestedTags: {
+    section: 'view',
+    tomlKey: 'nested_tags',
+    comment: 'show /-separated tags as a collapsible tree (sidebar + Tags view)'
+  },
   viewSettingsScope: {
     section: 'view',
     tomlKey: 'view_settings_scope',

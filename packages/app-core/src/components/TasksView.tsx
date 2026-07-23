@@ -54,6 +54,7 @@ export function TasksView(): JSX.Element {
   const addTaskForDate = useStore((s) => s.addTaskForDate)
   const closeTasksView = useStore((s) => s.closeTasksView)
   const reorderTaskInNote = useStore((s) => s.reorderTaskInNote)
+  const newTaskFile = useStore((s) => s.newTaskFile)
 
   // Tasks written inside a daily note inherit that note's date as an implicit
   // due date (a clean line, no `due:` token) so they appear on the calendar.
@@ -287,6 +288,10 @@ export function TasksView(): JSX.Element {
         case 'r':
           void refreshTasks()
           return
+        case 'new':
+        case 'add':
+          void store.newTaskFile()
+          return
         case 'list':
         case 'ls':
           setViewMode('list')
@@ -403,6 +408,15 @@ export function TasksView(): JSX.Element {
         return
       }
 
+      // Quick-add a new task file. View-independent (works in list/calendar/
+      // kanban). A single-key shortcut, so it's gated on Vim mode like the rest;
+      // with Vim off, the header "+ New task" button is the way in.
+      if (vimMode && key === 'a') {
+        consume()
+        void newTaskFile()
+        return
+      }
+
       if (seq('nav.filter')) {
         consume()
         filterRef.current?.focus()
@@ -499,7 +513,8 @@ export function TasksView(): JSX.Element {
     closeTasksView,
     setFilter,
     viewMode,
-    setViewMode
+    setViewMode,
+    newTaskFile
   ])
 
   return (
@@ -561,6 +576,14 @@ export function TasksView(): JSX.Element {
               className="w-56 rounded-md border border-paper-300/60 bg-paper-200/60 px-2 py-1 text-xs outline-none focus:border-paper-400/70"
             />
           )}
+          <button
+            type="button"
+            onClick={() => void newTaskFile()}
+            className="rounded-md border border-accent/45 bg-accent/10 px-2 py-1 text-xs font-medium text-accent hover:bg-accent/20"
+            title="New task (a)"
+          >
+            + New task
+          </button>
           <button
             type="button"
             onClick={() => void refreshTasks()}

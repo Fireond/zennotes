@@ -54,7 +54,7 @@ describe('Vim Flash integration', () => {
   function mountMath(doc: string, anchor = 0): EditorView {
     const view = mount(doc, anchor, [
       markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
-      mathRenderExtension
+      mathRenderExtension('katex')
     ])
     forceParsing(view, doc.length, 5000)
     // Rebuild math decorations after the Markdown parser has completed.
@@ -453,7 +453,7 @@ describe('Vim Flash integration', () => {
       const math = new Compartment()
       const view = mount(doc, 0, [
         markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
-        math.of(mathRenderExtension)
+        math.of(mathRenderExtension('katex'))
       ])
       forceParsing(view, doc.length, 5000)
       view.dispatch({ changes: { from: doc.length, insert: ' ' } })
@@ -467,7 +467,7 @@ describe('Vim Flash integration', () => {
 
       view.dispatch({ effects: math.reconfigure([]) })
       expect(view.dom.querySelector('.cm-math-inline')).toBeNull()
-      view.dispatch({ effects: math.reconfigure(mathRenderExtension) })
+      view.dispatch({ effects: math.reconfigure(mathRenderExtension('katex')) })
       await settleViewMeasure(view)
 
       const remounted = view.dom.querySelector<HTMLElement>('.cm-math-inline')

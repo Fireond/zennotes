@@ -11,7 +11,8 @@ import {
   nextWordStart,
   prevWordStart,
   nextWordEnd,
-  textObjectRange
+  textObjectRange,
+  findChar
 } from './cm-table'
 import { closeTableContextMenu } from './cm-table-menu'
 import { useStore } from '../store'
@@ -258,6 +259,29 @@ describe('vim word motions (cell cursor)', () => {
     // "a, b" → a(0) ,(1) space(2) b(3)
     expect(nextWordStart('a, b', 0)).toBe(1) // 'a' → ','
     expect(nextWordStart('a, b', 1)).toBe(3) // ',' → 'b'
+  })
+})
+
+describe('vim find-char (f / t / F / T, cell cursor)', () => {
+  const t = 'Engineer' // E n g i n e e r  (indices 0..7)
+  it('f finds the next occurrence forward', () => {
+    expect(findChar(t, 0, 'n', 1, false)).toBe(1)
+    expect(findChar(t, 1, 'n', 1, false)).toBe(4) // skips the current char
+    expect(findChar(t, 0, 'r', 1, false)).toBe(7)
+  })
+  it('t stops one char before the target (forward)', () => {
+    expect(findChar(t, 0, 'e', 1, true)).toBe(4) // 'e' at 5 → 4
+  })
+  it('F finds the next occurrence backward', () => {
+    expect(findChar(t, 7, 'n', -1, false)).toBe(4)
+    expect(findChar(t, 7, 'E', -1, false)).toBe(0)
+  })
+  it('T stops one char after the target (backward)', () => {
+    expect(findChar(t, 7, 'g', -1, true)).toBe(3) // 'g' at 2 → 3
+  })
+  it('returns null when the char is not found', () => {
+    expect(findChar(t, 0, 'z', 1, false)).toBeNull()
+    expect(findChar(t, 7, 'z', -1, false)).toBeNull()
   })
 })
 

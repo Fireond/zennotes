@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { EditorState, type Extension } from '@codemirror/state'
 import type { EditorView } from '@codemirror/view'
+import { embedRenderExtension } from './cm-embed-render'
 import { mathRenderExtension } from './cm-math-render'
 import { mathMarkdownSyntax } from './cm-math-syntax'
 import { tikzRenderExtension } from './cm-tikz-render'
@@ -81,7 +82,7 @@ describe('zenMoveByDisplayLine around rendered live-preview blocks', () => {
     head: { line: number; ch: number },
     args: MotionArgs,
     findPosVResult: { line: number; ch: number },
-    renderExtension: Extension = mathRenderExtension
+    renderExtension: Extension = mathRenderExtension('katex')
   ): { res: { line: number; ch: number }; findPosV: ReturnType<typeof vi.fn> } {
     const state = EditorState.create({
       doc,
@@ -189,5 +190,86 @@ describe('zenMoveByDisplayLine around rendered live-preview blocks', () => {
     )
     expect(up.findPosV).not.toHaveBeenCalled()
     expect(up.res.line).toBe(4)
+  })
+
+  it('bare j and k step logically into an embed block', () => {
+    const embedDoc = [
+      'alpha',
+      '',
+      '```embed',
+      'https://example.com/video',
+      '```',
+      '',
+      'omega'
+    ].join('\n')
+    const down = runWithDoc(
+      embedDoc,
+      { line: 1, ch: 0 },
+      { forward: true, repeat: 1 },
+      { line: 5, ch: 0 },
+      embedRenderExtension
+    )
+    expect(down.findPosV).not.toHaveBeenCalled()
+    expect(down.res.line).toBe(2)
+
+    const up = runWithDoc(
+      embedDoc,
+      { line: 5, ch: 0 },
+      { forward: false, repeat: 1 },
+      { line: 1, ch: 0 },
+      embedRenderExtension
+    )
+    expect(up.findPosV).not.toHaveBeenCalled()
+    expect(up.res.line).toBe(4)
+  })
+})
+
+describe('zenMoveByDisplayLine no-progress fallback (#423)', () => {
+  // Simulate the pixel motion failing to advance across a soft-wrap boundary
+  // (sub-pixel-imprecise coords, e.g. under fractional display scaling):
+  // findPosV returns the same head, which used to leave k/j stuck.
+  function runStuck(head: { line: number; ch: number }, forward: boolean): { line: number; ch: number } {
+    const cm = {
+      firstLine: () => 0,
+      lastLine: () => 100,
+      findPosV: () => ({ line: head.line, ch: head.ch }),
+      charCoords: () => ({ left: 42 })
+    } as unknown as Cm
+    return zenMoveByDisplayLine(cm, head, { forward, repeat: 1 }, {})
+  }
+
+  it('a k that fails to advance falls back to a logical step up', () => {
+    const res = runStuck({ line: 50, ch: 10 }, false)
+    expect(res.line).toBe(49)
+    expect(res.ch).toBe(10)
+  })
+
+  it('a j that fails to advance falls back to a logical step down', () => {
+    const res = runStuck({ line: 50, ch: 10 }, true)
+    expect(res.line).toBe(51)
+  })
+
+  it('does not fabricate movement above the first line', () => {
+    const res = runStuck({ line: 0, ch: 5 }, false)
+    expect(res.line).toBe(0)
+    expect(res.ch).toBe(5)
+  })
+
+  it('does not fabricate movement below the last line', () => {
+    const res = runStuck({ line: 100, ch: 5 }, true)
+    expect(res.line).toBe(100)
+  })
+
+  it('keeps the display-line result when it advances up a wrapped row', () => {
+    // Same logical line, smaller ch → a real one-row move; no fallback.
+    const cm = {
+      firstLine: () => 0,
+      lastLine: () => 100,
+      findPosV: () => ({ line: 50, ch: 3 }),
+      charCoords: () => ({ left: 42 })
+    } as unknown as Cm
+    const res = zenMoveByDisplayLine(cm, { line: 50, ch: 10 }, { forward: false, repeat: 1 }, {})
+    expect(res.line).toBe(50)
+    expect(res.ch).toBe(3)
   })
 })

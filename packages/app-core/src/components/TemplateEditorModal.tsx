@@ -19,7 +19,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { yamlFrontmatter } from '@codemirror/lang-yaml'
 import { syntaxHighlighting, HighlightStyle, defaultHighlightStyle } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
-import { autocompletion, completionKeymap } from '@codemirror/autocomplete'
+import { autocompletion } from '@codemirror/autocomplete'
 import { useStore } from '../store'
 import { parseFrontmatter, slugifyTemplateName } from '@shared/template-files'
 import { renderTemplate } from '../lib/template-render'
@@ -30,7 +30,7 @@ import { appMarkdownSnippetExtension } from '../lib/markdown-snippets-config'
 import { templateVariableSource, TEMPLATE_VARIABLES } from '../lib/cm-template-variables'
 import { templateSlashCommandSource, slashCommandRender } from '../lib/cm-slash-commands'
 import { calloutTypeSource } from '../lib/cm-callouts'
-import { completionNavKeymap } from '../lib/cm-completion-nav'
+import { completionKeymapForEditor, completionNavKeymap } from '../lib/cm-completion-nav'
 import { Modal } from './ui/Modal'
 import { Button } from './ui/Button'
 
@@ -142,6 +142,9 @@ export function TemplateEditorModal({
         // doesn't clip the slash / variable dropdowns.
         tooltips({ parent: document.body }),
         autocompletion({
+          // See EditorPane: skip the stock keymap so mac `Alt-`` / `Alt-i`
+          // don't swallow those characters on AltGr-style layouts (#429).
+          defaultKeymap: false,
           override: [templateSlashCommandSource, calloutTypeSource, templateVariableSource],
           activateOnTyping: true,
           icons: false,
@@ -154,7 +157,7 @@ export function TemplateEditorModal({
         completionNavKeymap,
         keymap.of([
           indentWithTab,
-          ...completionKeymap,
+          ...completionKeymapForEditor,
           ...vimAwareDefaultKeymap(vimModeRef.current),
           ...vimAwareAuxiliaryKeymap(historyKeymap, vimModeRef.current)
         ]),

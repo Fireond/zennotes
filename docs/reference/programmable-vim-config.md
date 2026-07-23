@@ -105,7 +105,7 @@ reference editors do not load them.
 With Vim enabled in the main note editor, the `vim.flashJump` Settings action defaults to `s`. It is available in normal, visual, and operator-pending modes:
 
 1. Press `s` to open the jump prompt.
-2. Type one or more literal query characters. Matching is Unicode-aware and case-insensitive, so `abc` also finds `ABC`.
+2. Type one or more literal query characters. Matching is Unicode-aware and smart-case: lowercase `abc` also finds `ABC`, while a query containing uppercase letters matches exact case.
 3. When the intended match displays a label, type that label to jump to it.
 
 Matches closest to the cursor receive home-row labels first. A character that could still extend the current query is not assigned as a label, so you can type any number of query characters before choosing a target. `Backspace` removes the last query character, `Enter` selects the closest labeled match, and `Esc` or `Ctrl+[` cancels the prompt.

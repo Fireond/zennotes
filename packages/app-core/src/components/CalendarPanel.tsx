@@ -30,6 +30,7 @@ import {
 } from '../lib/vault-layout'
 import { getISOWeek, getISOWeekYear } from '../lib/template-render'
 import { countWords } from '../lib/word-count'
+import { InlineMarkdown } from '../lib/inline-markdown'
 import { resolveWeekStartDay } from '../lib/week-start'
 import { ChevronLeftIcon, ChevronRightIcon } from './icons'
 import { confirmApp } from '../lib/confirm-requests'
@@ -848,7 +849,11 @@ export function CalendarPanel({ note }: { note: NoteContent }): JSX.Element {
           }}
           className="flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-paper-400/70 transition-colors hover:bg-paper-300/60"
         />
-        <span className="min-w-0 flex-1 truncate">{task.content || '(empty task)'}</span>
+        <InlineMarkdown
+          text={task.content || '(empty task)'}
+          interactiveLinks={false}
+          className="min-w-0 flex-1 truncate"
+        />
         {task.sourcePath !== (dailyByDate.get(dayIso)?.path ?? '') && (
           <span className="shrink-0 truncate text-2xs text-ink-400">{task.noteTitle}</span>
         )}

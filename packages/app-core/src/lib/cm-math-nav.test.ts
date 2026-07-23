@@ -41,7 +41,7 @@ describe('keyboard navigation into rendered live-preview blocks', () => {
     anchor: number,
     withVim: boolean,
     doc = DOC,
-    renderExtensions: readonly Extension[] = [mathRenderExtension]
+    renderExtensions: readonly Extension[] = [mathRenderExtension('katex')]
   ): EditorView {
     const view = new EditorView({
       parent: document.body,
@@ -93,7 +93,7 @@ describe('keyboard navigation into rendered live-preview blocks', () => {
         doc: 'I paid $5 and got $10 back.',
         extensions: [
           markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
-          mathRenderExtension
+          mathRenderExtension('katex')
         ]
       })
     })

@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import type { NoteContent, NoteMeta } from '@shared/ipc'
 import { backlinksForNote } from '../lib/wikilinks'
 import { countWords } from '../lib/word-count'
+import { useHoveredLinkStore } from '../lib/hovered-link'
 
 /**
  * Footer strip showing quick stats for the active note: backlinks,
@@ -33,19 +34,30 @@ export function StatusBar({ note }: { note: NoteContent }): JSX.Element {
     return backlinksForNote(notes as NoteMeta[], note).length
   }, [note.path, notes])
 
+  // The target of the link the mouse is over (browser-style), shown on the left.
+  const hoveredLink = useHoveredLinkStore((s) => s.href)
+
   return (
     <div
-      className="flex h-8 shrink-0 items-center justify-end gap-5 px-6 text-xs text-ink-500"
+      className="flex h-8 shrink-0 items-center justify-between gap-5 px-6 text-xs text-ink-500"
       style={{ borderTop: '1px solid var(--glass-stroke)' }}
     >
-      <Stat>
-        {backlinks} {backlinks === 1 ? 'backlink' : 'backlinks'}
-      </Stat>
-      <Stat>
-        {words.toLocaleString()} {words === 1 ? 'word' : 'words'}
-      </Stat>
-      <Stat>{characters.toLocaleString()} characters</Stat>
-      <Stat>{minutes} min read</Stat>
+      <span
+        className="min-w-0 flex-1 truncate font-mono text-ink-400"
+        title={hoveredLink ?? undefined}
+      >
+        {hoveredLink}
+      </span>
+      <div className="flex shrink-0 items-center gap-5">
+        <Stat>
+          {backlinks} {backlinks === 1 ? 'backlink' : 'backlinks'}
+        </Stat>
+        <Stat>
+          {words.toLocaleString()} {words === 1 ? 'word' : 'words'}
+        </Stat>
+        <Stat>{characters.toLocaleString()} characters</Stat>
+        <Stat>{minutes} min read</Stat>
+      </div>
     </div>
   )
 }

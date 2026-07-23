@@ -34,6 +34,7 @@ import type {
   ExternalFileContent,
   FolderEntry,
   ImportedAsset,
+  LinkMetadata,
   LocalVaultEntry,
   MoveExternalFileResult,
   NoteComment,
@@ -535,6 +536,17 @@ async function revealNoteTarget(_relPath: string): Promise<void> {
 
 async function revealFilePath(_absPath: string): Promise<void> {
   // No OS file manager on the web.
+}
+
+async function openExternalFile(_href: string): Promise<{ ok: boolean; error?: string }> {
+  // The web app has no access to the machine's filesystem or default apps.
+  return { ok: false, error: 'desktop-only' }
+}
+
+async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
+  // The browser can't fetch arbitrary cross-origin pages (CORS); a bookmark on
+  // web falls back to a bare link card until a server-side proxy is added.
+  return { url, ok: false }
 }
 
 async function revealFolder(_folder: NoteFolder, _subpath: string): Promise<void> {
@@ -1512,6 +1524,8 @@ export const httpBridge: ZenBridge = {
   duplicateNote,
   exportNotePdf,
   revealNote,
+  openExternalFile,
+  fetchLinkMetadata,
   revealNoteTarget,
   revealFilePath,
   moveNote,

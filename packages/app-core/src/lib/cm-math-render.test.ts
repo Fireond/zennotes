@@ -23,7 +23,7 @@ function mount(
       extensions: [
         markdown({ base: markdownLanguage, extensions: mathMarkdownSyntax }),
         mathSyntaxHighlight,
-        renderMath ? mathRenderExtension : []
+        renderMath ? mathRenderExtension('katex') : []
       ]
     })
   })
@@ -87,6 +87,13 @@ describe('mathRenderExtension', () => {
   it('leaves math inside inline code literal', () => {
     const view = mount('Use `$x^2$` verbatim.\n\nend')
     expect(view.dom.querySelectorAll('.cm-math-inline').length).toBe(0)
+    view.destroy()
+  })
+
+  it('keeps relaxed display delimiters raw in the editor', () => {
+    const view = mount('before $$\nx+1\n$$ after')
+    expect(view.dom.querySelector('.cm-math-block')).toBeNull()
+    expect(view.dom.textContent).toContain('$$')
     view.destroy()
   })
 

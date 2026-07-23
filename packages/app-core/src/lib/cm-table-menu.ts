@@ -147,12 +147,19 @@ export function openTableContextMenu(req: TableMenuRequest): void {
   const menu = document.createElement('div')
   menu.className = 'cm-table-menu'
   menu.setAttribute('role', 'menu')
+  // Mark as a context menu so the app's global capture-phase key handlers
+  // (VimNav note-list nav, pane focus, the list views) stand down while it's
+  // open — otherwise j/k/Enter leak past the menu to the sidebar. (#437)
+  menu.setAttribute('data-ctx-menu', '')
 
+  const itemEntries: { el: HTMLButtonElement; label: string; disabled: boolean }[] = []
+  const separators: HTMLElement[] = []
   for (const item of items) {
     if (item.kind === 'sep') {
       const sep = document.createElement('div')
       sep.className = 'cm-table-menu-sep'
       menu.append(sep)
+      separators.push(sep)
       continue
     }
     const button = document.createElement('button')
@@ -172,7 +179,32 @@ export function openTableContextMenu(req: TableMenuRequest): void {
       })
     }
     menu.append(button)
+    itemEntries.push({ el: button, label: item.label, disabled: !!item.disabled })
   }
+
+  // Type-to-filter header (mirrors the sidebar context menu) — hidden until the
+  // user starts typing. (#438)
+  const filterBar = document.createElement('div')
+  filterBar.className = 'cm-table-menu-filter'
+  filterBar.hidden = true
+  const filterText = document.createElement('span')
+  filterText.className = 'cm-table-menu-filter-text'
+  const filterCount = document.createElement('span')
+  filterCount.className = 'cm-table-menu-filter-count'
+  filterBar.append(
+    Object.assign(document.createElement('span'), {
+      className: 'cm-table-menu-filter-label',
+      textContent: 'filter'
+    }),
+    filterText,
+    filterCount
+  )
+  menu.prepend(filterBar)
+  const emptyEl = document.createElement('div')
+  emptyEl.className = 'cm-table-menu-empty'
+  emptyEl.textContent = 'No matches'
+  emptyEl.hidden = true
+  menu.append(emptyEl)
 
   document.body.append(menu)
   openMenu = menu
@@ -185,11 +217,48 @@ export function openTableContextMenu(req: TableMenuRequest): void {
   menu.style.top = `${Math.max(8, y)}px`
 
   // Keyboard navigation (Vim-friendly): j/k or ↓/↑ move the highlight, Enter
-  // invokes, Esc closes. Lets the whole action set be driven without a mouse.
-  const enabledButtons = Array.from(
-    menu.querySelectorAll<HTMLButtonElement>('.cm-table-menu-item:not(:disabled)')
-  )
+  // invokes, Esc closes. Any other printable character narrows the menu by
+  // case-insensitive substring on the label, like the sidebar context menu;
+  // Backspace deletes a character, Esc clears the filter before closing. j/k
+  // stay reserved for movement (so they can't be filter characters), matching
+  // that menu. (#438)
+  let enabledButtons: HTMLButtonElement[] = []
   let activeIndex = 0
+  let query = ''
+  const setLabel = (btn: HTMLButtonElement, label: string, q: string): void => {
+    const idx = q ? label.toLowerCase().indexOf(q) : -1
+    if (idx < 0) {
+      btn.textContent = label
+      return
+    }
+    btn.textContent = ''
+    btn.append(
+      document.createTextNode(label.slice(0, idx)),
+      Object.assign(document.createElement('span'), {
+        className: 'cm-table-menu-match',
+        textContent: label.slice(idx, idx + q.length)
+      }),
+      document.createTextNode(label.slice(idx + q.length))
+    )
+  }
+  const applyFilter = (): void => {
+    const q = query.trim().toLowerCase()
+    for (const entry of itemEntries) {
+      const match = q === '' || entry.label.toLowerCase().includes(q)
+      entry.el.hidden = !match
+      if (match) setLabel(entry.el, entry.label, q)
+    }
+    // Separators only make sense in the full, grouped list.
+    for (const sep of separators) sep.hidden = q !== ''
+    enabledButtons = itemEntries.filter((e) => !e.disabled && !e.el.hidden).map((e) => e.el)
+    filterBar.hidden = q === ''
+    filterText.textContent = query
+    filterCount.textContent = String(enabledButtons.length)
+    emptyEl.hidden = enabledButtons.length > 0
+    if (enabledButtons.length === 0) return
+    activeIndex = Math.min(activeIndex, enabledButtons.length - 1)
+    enabledButtons[activeIndex].focus()
+  }
   const focusItem = (i: number): void => {
     if (enabledButtons.length === 0) return
     activeIndex = (i + enabledButtons.length) % enabledButtons.length
@@ -199,23 +268,63 @@ export function openTableContextMenu(req: TableMenuRequest): void {
   const onDown = (e: MouseEvent): void => {
     if (!menu.contains(e.target as Node)) closeTableContextMenu()
   }
-  const NAV_KEYS = ['Escape', 'ArrowDown', 'j', 'ArrowUp', 'k', 'Enter', ' ']
   const onKey = (e: KeyboardEvent): void => {
-    if (!NAV_KEYS.includes(e.key)) return
-    // Consume the key fully so it can't also drive global/editor shortcuts
-    // while the menu is open.
-    e.preventDefault()
-    e.stopPropagation()
-    if (e.key === 'Escape') closeTableContextMenu()
-    else if (e.key === 'ArrowDown' || e.key === 'j') focusItem(activeIndex + 1)
-    else if (e.key === 'ArrowUp' || e.key === 'k') focusItem(activeIndex - 1)
-    else enabledButtons[activeIndex]?.click()
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      if (query) {
+        query = ''
+        activeIndex = 0
+        applyFilter()
+      } else {
+        closeTableContextMenu()
+      }
+      return
+    }
+    const plainKey = !e.metaKey && !e.ctrlKey && !e.altKey
+    if (e.key === 'ArrowDown' || (plainKey && e.key === 'j')) {
+      e.preventDefault()
+      e.stopPropagation()
+      focusItem(activeIndex + 1)
+      return
+    }
+    if (e.key === 'ArrowUp' || (plainKey && e.key === 'k')) {
+      e.preventDefault()
+      e.stopPropagation()
+      focusItem(activeIndex - 1)
+      return
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      enabledButtons[activeIndex]?.click()
+      return
+    }
+    if (e.key === 'Backspace') {
+      if (query) {
+        e.preventDefault()
+        e.stopPropagation()
+        query = query.slice(0, -1)
+        activeIndex = 0
+        applyFilter()
+      }
+      return
+    }
+    // A single printable character (no modifiers) narrows the menu.
+    if (!plainKey) return
+    if (e.key.length === 1) {
+      e.preventDefault()
+      e.stopPropagation()
+      query += e.key
+      activeIndex = 0
+      applyFilter()
+    }
   }
   // Defer so the originating contextmenu/right-click doesn't immediately close it.
   setTimeout(() => {
     window.addEventListener('mousedown', onDown, true)
     window.addEventListener('keydown', onKey, true)
-    focusItem(0)
+    applyFilter()
   }, 0)
 
   teardown = () => {

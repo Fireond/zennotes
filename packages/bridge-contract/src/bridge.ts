@@ -6,6 +6,7 @@ import type {
   ExternalFileContent,
   FolderEntry,
   ImportedAsset,
+  LinkMetadata,
   LocalVaultEntry,
   MoveExternalFileResult,
   ListNotesPageRequest,
@@ -182,6 +183,19 @@ export interface ZenBridge {
   revealNoteTarget(relPath: string): Promise<void>
   /** Reveal an arbitrary file path in the OS file manager (desktop only). */
   revealFilePath(absPath: string): Promise<void>
+  /**
+   * Open a file that lives outside the vault with the OS default app (desktop
+   * only). Accepts a raw markdown-link href: a `file://` URL, a `~/…` home path,
+   * or an absolute path. Returns `{ ok: false, error }` on the web (no OS) or
+   * when the open fails, so callers can surface a message.
+   */
+  openExternalFile(href: string): Promise<{ ok: boolean; error?: string }>
+  /**
+   * Fetch open-graph metadata for a URL to render a bookmark card. Desktop
+   * fetches and parses the page in the main process; the web build returns a
+   * minimal record. Never throws — `ok: false` on failure.
+   */
+  fetchLinkMetadata(url: string): Promise<LinkMetadata>
   moveNote(relPath: string, targetFolder: NoteFolder, targetSubpath: string): Promise<NoteMeta>
   importFilesToNote(notePath: string, sourcePaths: string[]): Promise<ImportedAsset[]>
   importPastedImage(input: PastedImageInput): Promise<ImportedAsset>

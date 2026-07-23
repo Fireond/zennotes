@@ -108,6 +108,20 @@ export function zenMoveByDisplayLine(
       return new CodeMirror.Pos(logicalTarget, head.ch)
     }
   }
+  // The pixel-based `findPosV` can fail to advance across a soft-wrap boundary
+  // when `coordsAtPos`/`posAtCoords` are sub-pixel-imprecise — e.g. under a
+  // compositor's fractional display scaling — which left `k` (and in principle
+  // `j`) stuck even though there were more lines that way (#423). If the motion
+  // didn't move in the requested direction but a logical line IS available that
+  // way, step there so the cursor always makes progress. In a pixel-accurate
+  // environment this never fires (the display-line motion advances every press),
+  // so wrapped-row movement is unchanged.
+  const advanced = forward
+    ? res.line > head.line || (res.line === head.line && res.ch > head.ch)
+    : res.line < head.line || (res.line === head.line && res.ch < head.ch)
+  if (!advanced && logicalTarget !== head.line) {
+    return new CodeMirror.Pos(logicalTarget, head.ch)
+  }
   vim.lastHPos = res.ch
   return res
 }

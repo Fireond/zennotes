@@ -31,8 +31,10 @@ const ALLOWED_RENDERED_URI_SCHEME_RE = /^(?:https?|mailto|zen|zen-asset|blob|dat
 const ALLOWED_RENDERED_URI_RE =
   /^(?:(?:https?|mailto|zen|zen-asset|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
 const ALLOWED_RENDERED_DATA_ATTRS = [
+  'data-bookmark-url',
   'data-callout',
   'data-embed-src',
+  'data-embed-url',
   'data-embed-height',
   'data-embed-width',
   'data-excalidraw-embed',
@@ -45,6 +47,8 @@ const ALLOWED_RENDERED_DATA_ATTRS = [
   'data-resolved-path',
   'data-tag',
   'data-tikz-source',
+  'data-typst-display',
+  'data-typst-source',
   'data-wikilink',
   'data-zen-diagram-expanded',
   'data-zen-diagram-kind',
@@ -405,7 +409,13 @@ function rehypeMathDiagrams() {
     'language-functionplot': {
       className: 'zen-function-plot',
       sourceAttr: 'data-function-plot-source'
-    }
+    },
+    // A ```embed fence holds a URL (YouTube, etc.) rendered as an iframe by
+    // `renderEmbeds`. The runtime replaces the placeholder with the player.
+    'language-embed': { className: 'zen-embed', sourceAttr: 'data-embed-url' },
+    // A ```bookmark fence holds a URL rendered as a rich link card (favicon /
+    // title / description / preview) by `renderBookmarks`.
+    'language-bookmark': { className: 'zen-bookmark', sourceAttr: 'data-bookmark-url' }
   }
   return (tree: HastRoot): void => {
     visit(tree, 'element', (node, index, parent) => {
@@ -529,26 +539,108 @@ function remarkCurrencyGuard() {
   }
 }
 
-const processor = unified()
-  .use(remarkParse)
-  .use(remarkFrontmatter, ['yaml', 'toml'])
-  .use(remarkGfm)
-  .use(remarkBreaks)
-  .use(remarkMath)
-  .use(remarkCurrencyGuard)
-  .use(remarkWikilinks)
-  .use(remarkHashtags)
-  .use(remarkHighlight)
-  .use(remarkCallouts)
-  .use(remarkSourceLines)
-  .use(remarkRehype, { allowDangerousHtml: true })
-  .use(rehypeRaw)
-  .use(rehypeTableColWidths)
-  .use(rehypeMermaid)
-  .use(rehypeMathDiagrams)
-  .use(rehypeHighlight, { detect: true, ignoreMissing: true })
-  .use(rehypeKatex)
-  .use(rehypeStringify)
+/**
+ * Remark plugin (Typst renderer only): rewrite `$…$` / `$$…$$` math nodes into
+ * `.zen-typst-math` placeholders carrying the raw Typst source, instead of
+ * letting rehype-katex bake KaTeX HTML. The runtime (`renderTypstMath` in
+ * `typst-math-render.ts`, invoked from Preview.tsx) fills each placeholder with
+ * a compiled SVG (the same placeholder-then-render pattern the diagram blocks
+ * use). Runs after remark-math so the math nodes already exist.
+ */
+function remarkTypstMathPlaceholders() {
+  return (tree: MdRoot): void => {
+    visit(tree, ['math', 'inlineMath'], (node) => {
+      const mathNode = node as AnyNode & { value?: string; data?: Record<string, unknown> }
+      const display = mathNode.type === 'math'
+      const value = String(mathNode.value ?? '')
+      const data = (mathNode.data ??= {})
+      data.hName = display ? 'div' : 'span'
+      data.hProperties = {
+        className: display
+          ? ['zen-typst-math', 'zen-typst-display']
+          : ['zen-typst-math'],
+        'data-typst-source': value,
+        'data-typst-display': display ? 'true' : 'false'
+      }
+      data.hChildren = [{ type: 'text', value }]
+    })
+  }
+}
+
+/**
+ * Build the markdown → HTML processor for a given math renderer. Everything is
+ * shared except the math step: KaTeX bakes formulas into HTML via rehype-katex;
+ * Typst emits placeholders (rehype-katex is omitted) for the runtime to render.
+ */
+function createProcessor(mathRenderer: 'katex' | 'typst') {
+  const base = unified()
+    .use(remarkParse)
+    .use(remarkFrontmatter, ['yaml', 'toml'])
+    .use(remarkGfm)
+    .use(remarkBreaks)
+    .use(remarkMath)
+    .use(remarkCurrencyGuard)
+
+  const withTypst =
+    mathRenderer === 'typst' ? base.use(remarkTypstMathPlaceholders) : base
+
+  const rehyped = withTypst
+    .use(remarkWikilinks)
+    .use(remarkHashtags)
+    .use(remarkHighlight)
+    .use(remarkCallouts)
+    .use(remarkSourceLines)
+    .use(remarkRehype, { allowDangerousHtml: true })
+    .use(rehypeRaw)
+    .use(rehypeTableColWidths)
+    .use(rehypeMermaid)
+    .use(rehypeMathDiagrams)
+    .use(rehypeHighlight, { detect: true, ignoreMissing: true })
+
+  const withKatex =
+    mathRenderer === 'katex' ? rehyped.use(rehypeKatex) : rehyped
+
+  return withKatex.use(rehypeStringify)
+}
+
+const katexProcessor = createProcessor('katex')
+let typstProcessor: ReturnType<typeof createProcessor> | null = null
+
+// Which typesetter `renderMarkdown` uses. Driven by the `mathRenderer` setting
+// (App.tsx pushes changes here). Default KaTeX keeps existing notes unchanged.
+let activeMathRenderer: 'katex' | 'typst' = 'katex'
+
+/**
+ * Point the preview pipeline at KaTeX or Typst. Clears the render cache so the
+ * current note re-renders under the new engine on the next `renderMarkdown`.
+ */
+export function setMarkdownMathRenderer(mathRenderer: 'katex' | 'typst'): void {
+  if (mathRenderer === activeMathRenderer) return
+  activeMathRenderer = mathRenderer
+  markdownRenderCache.clear()
+}
+
+// When on, a `$$…$$` display block also renders when prose sits before the
+// opening fence (`Note: $$…$$`) or after the closing fence (`$$…$$ done`); the
+// prose is split onto its own paragraph so the fence owns its line. Off by
+// default (the `looseMathDelimiters` setting drives it); the editor keeps
+// showing source for those shapes, so this only relaxes the reading view.
+let looseMathDelimiters = false
+
+/** Toggle relaxed `$$` display-math delimiters (prose before/after the fence).
+ *  Clears the render cache so the current note re-renders under the new rule. */
+export function setMarkdownLooseMathDelimiters(loose: boolean): void {
+  if (loose === looseMathDelimiters) return
+  looseMathDelimiters = loose
+  markdownRenderCache.clear()
+}
+
+function activeProcessor() {
+  if (activeMathRenderer === 'typst') {
+    return (typstProcessor ??= createProcessor('typst'))
+  }
+  return katexProcessor
+}
 
 const MARKDOWN_RENDER_CACHE_LIMIT = 24
 const markdownRenderCache = new Map<string, string>()
@@ -623,7 +715,7 @@ function escapeTableMathPipes(src: string): string {
  * anything the editor itself rejects (mid-line `$$`, empty or unclosed blocks)
  * passes through unchanged — canonical notes come back byte-identical.
  */
-function normalizeBlockMathFences(src: string): string {
+function normalizeBlockMathFences(src: string, loose = false): string {
   if (!src.includes('$$')) return src
   const lines = src.split('\n')
   const out: string[] = []
@@ -646,14 +738,27 @@ function normalizeBlockMathFences(src: string): string {
       i++
       continue
     }
-    const open = raw.match(/^( {0,3})\$\$(?!\$)(.*)$/)
-    if (!open) {
+    // Opening fence: strict is `$$` at line start; loose also accepts prose
+    // before a `$$` that ends the line (`Note: $$`), splitting the prose off.
+    let indent: string | null = null
+    let rest = ''
+    let proseBefore = ''
+    const strictOpen = raw.match(/^( {0,3})\$\$(?!\$)(.*)$/)
+    if (strictOpen) {
+      indent = strictOpen[1]
+      rest = strictOpen[2]
+    } else if (loose) {
+      const looseOpen = raw.match(/^( {0,3})(.+?)\s*\$\$(?!\$)\s*$/)
+      if (looseOpen && !looseOpen[2].includes('$$')) {
+        indent = looseOpen[1]
+        proseBefore = looseOpen[2]
+      }
+    }
+    if (indent === null) {
       out.push(raw)
       i++
       continue
     }
-    const indent = open[1]
-    const rest = open[2]
     const restTrimmed = rest.trim()
     if (restTrimmed.includes('$$')) {
       // `$$x^2$$` on one line: expand it. Anything else with a `$$` mid-line
@@ -672,9 +777,11 @@ function normalizeBlockMathFences(src: string): string {
       continue
     }
     // Multi-line block: find the closing fence, giving up at the first `$$`
-    // the editor's whole-line rule would reject.
+    // the editor's whole-line rule would reject. In loose mode, prose after
+    // the close fence (`$$ done`) is also accepted and split off.
     let close = -1
     let closeHasContent = false
+    let closeTrailing = ''
     for (let k = i + 1; k < lines.length; k++) {
       const t = lines[k].trim()
       if (!t.includes('$$')) continue
@@ -683,14 +790,29 @@ function normalizeBlockMathFences(src: string): string {
       } else if (t.endsWith('$$') && t.indexOf('$$') === t.length - 2) {
         close = k
         closeHasContent = true
+      } else if (loose) {
+        // `$$ done` (prose after the close) or `x^2$$ done` (content + prose).
+        const trailing = t.match(/^(.*?)\$\$(?!\$)\s+(\S.*)$/)
+        if (trailing && !trailing[1].includes('$$')) {
+          close = k
+          if (trailing[1].trim() !== '') closeHasContent = true
+          closeTrailing = trailing[2]
+        }
       }
       break
     }
-    if (close === -1 || (restTrimmed === '' && !closeHasContent)) {
+    const alreadyCanonical =
+      restTrimmed === '' && !closeHasContent && proseBefore === '' && closeTrailing === ''
+    if (close === -1 || alreadyCanonical) {
       // Unclosed, editor-rejected, or already canonical: leave untouched.
       out.push(raw)
       i++
       continue
+    }
+    if (proseBefore !== '') {
+      // Prose leading the open fence becomes its own paragraph.
+      out.push(`${indent}${proseBefore}`, '')
+      changed = true
     }
     out.push(`${indent}$$`)
     if (restTrimmed !== '') {
@@ -698,7 +820,15 @@ function normalizeBlockMathFences(src: string): string {
       changed = true
     }
     for (let k = i + 1; k < close; k++) out.push(lines[k])
-    if (closeHasContent) {
+    if (closeTrailing !== '') {
+      // Loose close: `[content]$$ trailing` -> content, `$$`, blank, trailing.
+      const rawClose = lines[close]
+      const idx = rawClose.lastIndexOf('$$')
+      const beforeDollar = rawClose.slice(0, idx)
+      if (beforeDollar.trim() !== '') out.push(beforeDollar)
+      out.push(`${indent}$$`, '', `${indent}${closeTrailing}`)
+      changed = true
+    } else if (closeHasContent) {
       const rawClose = lines[close]
       const idx = rawClose.lastIndexOf('$$')
       out.push(rawClose.slice(0, idx), `${indent}$$`)
@@ -721,7 +851,11 @@ export function renderMarkdown(src: string): string {
   const startedAt = performance.now()
   try {
     const html = sanitizeRenderedHtml(
-      String(processor.processSync(escapeTableMathPipes(normalizeBlockMathFences(src))))
+      String(
+        activeProcessor().processSync(
+          escapeTableMathPipes(normalizeBlockMathFences(src, looseMathDelimiters))
+        )
+      )
     )
     cacheRenderedMarkdown(src, html)
     recordRendererPerf('markdown.render', performance.now() - startedAt, {
